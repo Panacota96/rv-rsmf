@@ -1,0 +1,15 @@
+{
+  "source": "whatsapp",
+  "path": "whatsapp-ios-es.zip",
+  "options": {
+    "timezone": "America/Bogota",
+    "date_order": null
+  },
+  "conversations": 1,
+  "events": 5,
+  "attachments_packed": 1,
+  "attachments_missing": 0,
+  "findings": [
+    "DATE_ORDER_INFERRED"
+  ]
+}

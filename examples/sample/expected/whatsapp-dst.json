@@ -1,0 +1,17 @@
+{
+  "source": "whatsapp",
+  "path": "whatsapp-dst.txt",
+  "options": {
+    "timezone": "Europe/Paris",
+    "date_order": null
+  },
+  "conversations": 1,
+  "events": 5,
+  "attachments_packed": 0,
+  "attachments_missing": 0,
+  "findings": [
+    "DATE_ORDER_INFERRED",
+    "DST_AMBIGUOUS_OR_MISSING_TIME",
+    "UNPARSED_LINES"
+  ]
+}

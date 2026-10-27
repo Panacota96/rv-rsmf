@@ -1,0 +1,17 @@
+{
+  "source": "telegram",
+  "path": "telegram/result.json",
+  "options": {
+    "timezone": null,
+    "date_order": null
+  },
+  "conversations": 2,
+  "events": 15,
+  "attachments_packed": 2,
+  "attachments_missing": 2,
+  "findings": [
+    "ATTACHMENT_REFERENCED_NOT_FOUND",
+    "EDIT_HISTORY_NOT_IN_EXPORT",
+    "TELEGRAM_FILE_NOT_INCLUDED"
+  ]
+}
