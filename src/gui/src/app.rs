@@ -113,12 +113,12 @@ impl HashInvApp {
         while let Ok(m) = rx.try_recv() {
             match m {
                 Msg::Event(e) => {
-                    if let Event::Timestamp { status, reason, .. } = &e {
-                        if status != "ok" {
-                            self.state
-                                .warnings
-                                .push(format!("timestamp: {}", reason.as_deref().unwrap_or("-")));
-                        }
+                    if let Event::Timestamp { status, reason, .. } = &e
+                        && status != "ok"
+                    {
+                        self.state
+                            .warnings
+                            .push(format!("timestamp: {}", reason.as_deref().unwrap_or("-")));
                     }
                     self.state.apply(&e)
                 }
@@ -323,10 +323,10 @@ impl HashInvApp {
                     } else {
                         r.on_disabled_hover_text(tip)
                     };
-                    if r.changed() {
-                        if let Err(e) = self.state.toggle_algo(a) {
-                            self.notice = Some(e);
-                        }
+                    if r.changed()
+                        && let Err(e) = self.state.toggle_algo(a)
+                    {
+                        self.notice = Some(e);
                     }
                 }
             });

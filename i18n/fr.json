@@ -139,13 +139,127 @@
       "title": "Le chemin enregistré contient désormais un autre contenu",
       "shows": "Ce chemin a déjà été enregistré comme %{previous_id} avec un autre contenu ; le contenu actuel reçoit un nouvel ID d'élément.",
       "does_not_prove": "Quelle version est l'originale ni pourquoi le contenu a changé."
+    },
+    "DATE_ORDER_INFERRED": {
+      "title": "Ordre des dates déduit de l'export",
+      "shows": "Les dates numériques ont été lues comme %{order} : la ligne %{line} (« %{example} ») n'admet que cette lecture.",
+      "does_not_prove": "Cela ne montre pas que toutes les lignes ont été écrites avec les mêmes réglages du téléphone ; les exports mélangés apparaissent comme lignes non interprétées."
+    },
+    "DATE_ORDER_CHOSEN": {
+      "title": "Ordre des dates choisi par l'expert",
+      "shows": "Les dates de cet export admettent plusieurs ordres ; l'expert a choisi %{order} (--date-order).",
+      "does_not_prove": "Le choix est celui de l'expert ; l'export n'indique pas l'ordre utilisé par le téléphone."
+    },
+    "TIMEZONE_APPLIED": {
+      "title": "Heures locales converties avec le fuseau de l'expert",
+      "shows": "Les heures de l'export n'ont pas de décalage UTC ; elles ont été lues comme %{timezone} et enregistrées en UTC. Le texte d'origine de chaque heure est conservé dans le champ source_time de l'événement.",
+      "does_not_prove": "Cela ne montre pas que le téléphone était réglé sur %{timezone} ; un mauvais fuseau décale toutes les heures d'autant."
+    },
+    "DST_AMBIGUOUS_OR_MISSING_TIME": {
+      "title": "Heures lors d'un changement d'heure",
+      "shows": "%{count} heure(s) tombent sur un changement d'heure à %{timezone} (heure répétée : premier instant retenu ; heure inexistante : avancée) : %{examples}.",
+      "does_not_prove": "Cela ne montre pas lequel des deux instants était visé pour une heure répétée."
+    },
+    "NON_MONOTONIC_TIMESTAMPS": {
+      "title": "Messages hors ordre chronologique",
+      "shows": "%{count} message(s) ont une heure antérieure au message qui les précède dans l'export (le premier à %{first}).",
+      "does_not_prove": "Changements d'heure, délais réseau et modifications le provoquent ; cela ne montre pas que des messages ont été insérés."
+    },
+    "UNPARSED_LINES": {
+      "title": "Lignes illisibles",
+      "shows": "%{count} ligne(s) ou enregistrement(s) ne correspondent à aucun format connu et ne sont pas dans le RSMF ; premières : %{examples}.",
+      "does_not_prove": "Cela ne montre pas qu'il manque du contenu ; il peut s'agir d'en-têtes ou de lignes endommagées. Vérifiez-les dans l'export."
+    },
+    "MEDIA_OMITTED_IN_EXPORT": {
+      "title": "Médias non inclus dans l'export",
+      "shows": "%{count} message(s) indiquent que le média a été omis lors de l'export (« sans médias »).",
+      "does_not_prove": "Cela ne montre pas ce que contenait le média, ni qu'il a été supprimé du téléphone."
+    },
+    "ATTACHMENT_REFERENCED_NOT_FOUND": {
+      "title": "Fichier référencé introuvable",
+      "shows": "%{count} pièce(s) jointe(s) sont citées dans l'export mais le fichier en est absent : %{examples}.",
+      "does_not_prove": "Cela ne montre pas que le fichier a été retiré volontairement ; les exports peuvent être incomplets."
+    },
+    "TELEGRAM_FILE_NOT_INCLUDED": {
+      "title": "Fichiers Telegram exclus de l'export",
+      "shows": "%{count} fichier(s) n'ont pas été exportés (exclus par les réglages, trop volumineux ou indisponibles).",
+      "does_not_prove": "Cela ne montre pas ce que contenaient les fichiers."
+    },
+    "REACTION_NOT_SUPPORTED_BY_RELATIVITY": {
+      "title": "Réactions affichées en texte par Relativity",
+      "shows": "Ces réactions n'ont pas de code court Relativity et sont enregistrées en texte : %{values}.",
+      "does_not_prove": "Cela ne change pas la réaction, seulement son affichage."
+    },
+    "EDIT_HISTORY_NOT_IN_EXPORT": {
+      "title": "Messages modifiés sans leur texte antérieur",
+      "shows": "%{count} message(s) sont marqués comme modifiés, mais l'export ne contient que la dernière version.",
+      "does_not_prove": "Cela ne montre pas ce que disait le texte antérieur."
+    },
+    "DELETED_MESSAGES_NOT_IN_EXPORT": {
+      "title": "Les messages supprimés ne sont pas exportés",
+      "shows": "Les exports %{source} omettent les messages supprimés avant l'export ; le RSMF ne peut contenir que ce que contient l'export.",
+      "does_not_prove": "Cela ne montre pas si des messages ont été supprimés."
+    },
+    "POSSIBLE_EXPORT_LIMIT": {
+      "title": "Export peut-être tronqué",
+      "shows": "L'export contient %{count} messages, près de la limite que WhatsApp appliquerait aux exports (environ 40 000 sans médias, 10 000 avec médias ; non confirmé par WhatsApp).",
+      "does_not_prove": "Cela ne montre pas qu'il manque des messages ; comparez avec une extraction forensique du téléphone."
+    },
+    "PARTICIPANT_IDENTIFIED_BY_NUMBER_ONLY": {
+      "title": "Participants identifiés seulement par un numéro",
+      "shows": "%{count} participant(s) n'apparaissent que comme un numéro (absents des contacts du téléphone) : %{examples}.",
+      "does_not_prove": "Un numéro n'identifie pas une personne ; établissez qui l'utilisait par d'autres éléments."
+    },
+    "DAY_SPLIT_OVER_10000_EVENTS": {
+      "title": "Journée chargée découpée en plusieurs fichiers",
+      "shows": "%{conversation} compte plus de 10 000 événements le %{day} ; ce jour a été écrit en %{parts} fichiers (limite Relativity par fichier).",
+      "does_not_prove": "Cela ne modifie aucun message ; toutes les parties partagent le même identifiant de collection."
+    },
+    "DUPLICATE_MESSAGES": {
+      "title": "Messages répétés",
+      "shows": "%{count} message(s) répètent exactement un message précédent (même expéditeur, heure et texte).",
+      "does_not_prove": "Les renvois et incidents d'export le provoquent ; cela ne montre pas une manipulation. Toutes les copies sont conservées."
+    },
+    "CSV_MAPPING_DRAFT_PROFILE": {
+      "title": "Correspondance de colonnes non encore validée",
+      "shows": "Le CSV a été lu avec le profil de colonnes %{profile}, non vérifié sur de vrais exports de cet outil.",
+      "does_not_prove": "Cela ne montre pas que la correspondance est fausse ; vérifiez quelques messages dans l'outil source avant de vous fier au RSMF."
+    },
+    "RSMF_SCHEMA_INVALID": {
+      "title": "Le fichier RSMF a échoué à la validation",
+      "shows": "%{file} ne passe pas le schéma RSMF 2.0 ou les contrôles stricts de rv-rsmf : %{errors}.",
+      "does_not_prove": "Cela ne montre pas que l'export est erroné ; ce fichier ne doit pas être chargé dans Relativity avant correction."
+    },
+    "RSMF_ROUNDTRIP_MISMATCH": {
+      "title": "Le fichier RSMF ne se relit pas comme écrit",
+      "shows": "La relecture de %{file} donne un contenu différent de celui écrit : %{problems}.",
+      "does_not_prove": "Cela ne montre pas l'origine de l'écart (disque, antivirus, défaut logiciel) ; le fichier doit être régénéré."
+    },
+    "PARSER_FAILED": {
+      "title": "L'export n'a pas pu être converti",
+      "shows": "Le lecteur %{source} s'est arrêté sur cet export : %{error}. Aucun RSMF n'a été écrit ; le reste de l'exécution a continué.",
+      "does_not_prove": "Cela ne montre pas que l'export a été altéré ; il peut être endommagé ou dans un format non encore pris en charge."
+    },
+    "PART_OF_EXPORT": {
+      "title": "Fichier d'un export de discussion",
+      "shows": "Ce fichier fait partie de l'export %{export} (média ou pièce jointe) et a été converti avec lui.",
+      "does_not_prove": "Cela n'indique pas quel message y fait référence ; voir la table de traçabilité."
+    },
+    "NOT_A_CHAT_EXPORT": {
+      "title": "Non reconnu comme export de discussion",
+      "shows": "Le fichier n'est pas un export WhatsApp, Telegram, Teams .msg ou CSV et n'en fait pas partie ; il a été haché mais pas converti.",
+      "does_not_prove": "Cela ne montre pas que le fichier est sans intérêt ; forcez le type avec --source s'il s'agit d'un export."
     }
   },
   "limitations": {
     "SIGNATURE_TABLE_LIMITED": "La détection du type repose sur une table limitée de signatures courantes ; les types inconnus sont signalés comme inconnus, non comme suspects.",
     "TIMESTAMPS_FROM_FILESYSTEM": "Les dates de modification proviennent du système de fichiers de la copie examinée et peuvent différer de la source d'origine.",
     "CLEAN_RESULT_IS_NOT_AUTHENTICITY": "Un résultat sans constatation ne prouve pas qu'un fichier est authentique ni qu'il n'a pas été modifié avant son acquisition.",
-    "TIMESTAMP_PROVES_EXISTENCE_ONLY": "Un horodatage qualifié prouve que le journal d'audit existait sous cette forme exacte à l'heure indiquée ; il ne prouve pas que la copie examinée correspond à la source d'origine."
+    "TIMESTAMP_PROVES_EXISTENCE_ONLY": "Un horodatage qualifié prouve que le journal d'audit existait sous cette forme exacte à l'heure indiquée ; il ne prouve pas que la copie examinée correspond à la source d'origine.",
+    "CONVERSION_REPRESENTS_THE_EXPORT_NOT_THE_DEVICE": "Les fichiers RSMF reproduisent l'export tel que remis, non le téléphone ou le compte : les messages supprimés avant l'export, les médias non exportés et l'historique des modifications n'y figurent pas.",
+    "EXPORT_CONTENT_NOT_AUTHENTICATED": "rv-rsmf convertit ; il n'authentifie pas. Un export de discussion est un fichier texte ou JSON modifiable avant d'arriver à l'expert ; corroborez-le par une extraction forensique ou la copie de l'autre partie.",
+    "RELATIVITY_RENDERING_NOT_VERIFIED": "Les fichiers sont vérifiés avec le schéma RSMF 2.0 publié et relus ; l'affichage dans une version donnée de Relativity n'a pas été testé par cette exécution.",
+    "SHORTCODE_TABLE_VERSION": "Les réactions sont converties avec une table fixe de codes courts Relativity (vérifiée le 2026-10-27) ; les autres restent en texte."
   },
   "brand": {
     "descriptor": "INVESTIGATION NUMÉRIQUE | RÉPONSE AUX INCIDENTS | SÉCURITÉ",

@@ -21,7 +21,11 @@ pub const SCHEMA_TECHNICAL: &str = "rakvor.item-technical/1";
 pub const SCHEMA_SUMMARY: &str = "rakvor.item-summary/1";
 
 /// Run-level limitations, always printed (what this tool cannot tell you).
-pub const LIMITATIONS: [&str; 4] = [
+pub const LIMITATIONS: [&str; 8] = [
+    "CONVERSION_REPRESENTS_THE_EXPORT_NOT_THE_DEVICE",
+    "EXPORT_CONTENT_NOT_AUTHENTICATED",
+    "RELATIVITY_RENDERING_NOT_VERIFIED",
+    "SHORTCODE_TABLE_VERSION",
     "SIGNATURE_TABLE_LIMITED",
     "TIMESTAMPS_FROM_FILESYSTEM",
     "CLEAN_RESULT_IS_NOT_AUTHENTICITY",

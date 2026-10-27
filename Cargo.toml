@@ -9,7 +9,7 @@ version = "0.1.0"
 edition = "2024"
 license = "LicenseRef-Rakvor-Audit"
 publish = false
-rust-version = "1.85"
+rust-version = "1.88"
 authors = ["Rakvor"]
 repository = "https://github.com/Panacota96/rv-rsmf"
 
@@ -24,7 +24,7 @@ digest = "0.11"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 minijinja = { version = "3", features = ["serde"] }
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 walkdir = "2.5"
 clap = { version = "4.6", features = ["derive", "wrap_help", "env"] }
 indicatif = "0.18"
@@ -44,6 +44,15 @@ spki = "0.7"
 const-oid = { version = "0.9", features = ["db"] }
 rsa = { version = "0.9", features = ["sha2"] }
 sha2-legacy = { package = "sha2", version = "0.10" }
+# rv-rsmf domain: chat exports -> RSMF 2.0
+zip = { version = "9.1", default-features = false, features = ["deflate"] }
+chrono-tz = "0.10"
+jsonschema = { version = "0.60", default-features = false }
+cfb = "0.15"
+csv = "1.4"
+encoding_rs = "0.8"
+toml = "1.1"
+regex = "1.13"
 tempfile = "3"
 assert_cmd = "2"
 predicates = "3"
