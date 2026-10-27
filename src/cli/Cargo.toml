@@ -12,6 +12,8 @@ name = "rv-rsmf"
 path = "src/main.rs"
 
 [dependencies]
+chrono-tz.workspace = true
+walkdir.workspace = true
 rv-rsmf-core.workspace = true
 clap.workspace = true
 indicatif.workspace = true

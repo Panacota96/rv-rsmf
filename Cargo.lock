@@ -3662,6 +3662,7 @@ name = "rv-rsmf-cli"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",
+ "chrono-tz",
  "clap",
  "ctrlc",
  "indicatif",
@@ -3670,6 +3671,7 @@ dependencies = [
  "rv-rsmf-core",
  "serde_json",
  "tempfile",
+ "walkdir",
  "winresource",
 ]
 

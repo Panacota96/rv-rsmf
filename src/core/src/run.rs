@@ -51,6 +51,12 @@ pub struct RunConfig {
     pub evidence_ids: Vec<String>,
     /// Intake (registers evidence) or analysis (verifies against the registry). Default: [`crate::CASE_ROLE`].
     pub case_role: CaseRole,
+    /// Chat-export conversion settings (time zone, date order, CSV mapping, custodian, platform name).
+    pub convert: crate::convert::ConvertOptions,
+    /// Run the intake tool (rv-hashinv) on the same evidence first (`--intake hashinv`; needs `case_dir`).
+    pub intake_hashinv: bool,
+    /// rv-hashinv executable to use (`--hashinv-exe`); None = search (see [`crate::intake::candidates`]).
+    pub hashinv_exe: Option<PathBuf>,
 }
 
 impl Default for RunConfig {
@@ -76,6 +82,9 @@ impl Default for RunConfig {
             case_dir: None,
             evidence_ids: vec![],
             case_role: crate::CASE_ROLE,
+            convert: crate::convert::ConvertOptions::default(),
+            intake_hashinv: false,
+            hashinv_exe: None,
         }
     }
 }
@@ -99,6 +108,10 @@ pub struct RunSummary {
     pub timestamp: Value,
     /// Case folder runs: case id, role and how the items relate to the registry.
     pub case: Option<CaseInfo>,
+    /// Exports, conversations, events and RSMF files of the run.
+    pub conversion: crate::convert::ConversionTotals,
+    /// Folder holding the run's .rsmf files, trace.csv/json and conversions.json.
+    pub rsmf_dir: PathBuf,
 }
 
 /// A run linked to a case folder.
@@ -248,7 +261,7 @@ fn new_run_id() -> String {
     )
 }
 
-fn csv_field(s: &str) -> String {
+pub fn csv_field(s: &str) -> String {
     if s.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", s.replace('"', "\"\""))
     } else {
@@ -279,6 +292,13 @@ pub fn run(
         let report_dir = cfg.out_dir.join("reports").join(&run_id);
         return pipeline(cfg, sink, cancel, &run_id, &log_dir, &report_dir, None);
     };
+    let delegated;
+    let cfg = if cfg.intake_hashinv {
+        delegated = delegate_intake(cfg, case_dir, sink, cancel)?;
+        &delegated
+    } else {
+        cfg
+    };
     let (cfg, mut link) = open_case(cfg, case_dir, &run_id)?;
     let log_dir = link.run_dir.join("logs");
     let report_dir = link.run_dir.join("reports");
@@ -293,6 +313,38 @@ pub fn run(
     );
     finish_case(&link, &cfg, &log_dir, &result, sink);
     result
+}
+
+/// `--intake hashinv`: rv-hashinv registers the evidence, then this run analyses it. The delegation (which
+/// executable, its SHA-256, the arguments, its run id and exit code) opens this run's audit log.
+fn delegate_intake(
+    cfg: &RunConfig,
+    case_dir: &Path,
+    sink: &mut dyn FnMut(&Event),
+    cancel: &AtomicBool,
+) -> Result<RunConfig, String> {
+    if cfg.inputs.is_empty() && cfg.input_list.is_none() {
+        return Err(
+            "--intake hashinv needs the evidence to register (--input or --input-list)".into(),
+        );
+    }
+    if !cfg.evidence_ids.is_empty() {
+        return Err(
+            "--intake hashinv registers new evidence: it cannot be combined with --evidence".into(),
+        );
+    }
+    let tool = crate::intake::locate(cfg.hashinv_exe.as_deref())?;
+    let (args, outcome) = crate::intake::run_intake(&tool, cfg, case_dir, sink, cancel)?;
+    let mut next = cfg.clone();
+    // The case now exists with its id and jurisdiction; let case.json decide from here on.
+    next.preamble.insert(
+        0,
+        (
+            "intake_delegated".into(),
+            crate::intake::audit_details(&tool, &args, &outcome),
+        ),
+    );
+    Ok(next)
 }
 
 fn pipeline(
@@ -478,6 +530,7 @@ fn pipeline(
             evidence_id: None,
             case_status: None,
             intake_utc: None,
+            conversion: None,
         };
         match outcome {
             Ok(None) => {
@@ -571,6 +624,27 @@ fn pipeline(
     if let (Some(l), CaseRole::Intake) = (link.as_deref_mut(), cfg.case_role) {
         register_items(l, &mut results, &hashed_seq, &mut log, sink)?;
     }
+
+    // Conversion: exports → RSMF files, validated, read back and traced.
+    let rsmf_dir = match link.as_deref() {
+        Some(l) => l.run_dir.join("rsmf"),
+        None => cfg.out_dir.join("rsmf").join(&run_id),
+    };
+    log.record("conversion_started", None, json!({"options": cfg.convert.to_json(), "rsmf_dir": rsmf_dir.display().to_string(),
+        "rsmf_version": crate::rsmf::RSMF_VERSION, "shortcode_table": crate::rsmf::shortcodes::TABLE_VERSION})).map_err(io)?;
+    let conversion = crate::convert::convert_items(
+        &mut results,
+        &cfg.convert,
+        &cfg.algorithms,
+        &format!("{} {}", cfg.tool_name, cfg.tool_version),
+        cfg.case_id.as_deref().unwrap_or(""),
+        &rsmf_dir,
+        &mut log,
+        sink,
+        cancel,
+    )?;
+    log.record("conversion_finished", None, json!(conversion))
+        .map_err(io)?;
 
     // Duplicates (cross-item finding).
     let primary = cfg.algorithms[0];
@@ -733,6 +807,8 @@ fn pipeline(
         audit_head: String::new(),
         timestamp: info.timestamp.clone(),
         case: info.case.clone(),
+        conversion,
+        rsmf_dir,
     };
     log.record("run_finished", None, json!({"items": summary.items, "bytes": summary.bytes, "errors": errors, "elapsed_ms": summary.elapsed_ms, "high": summary.high, "medium": summary.medium, "low": summary.low, "info": summary.info, "cancelled": cancelled})).map_err(io)?;
     sink(&Event::RunFinished {
@@ -962,7 +1038,11 @@ mod tests {
         .unwrap();
         assert_eq!(s.items, 3);
         assert_eq!(s.medium, 1); // extension mismatch
-        assert_eq!(s.info, 2); // duplicate pair
+        assert_eq!(s.info, 5); // duplicate pair + 3 files that are not chat exports
+        assert_eq!(s.conversion.exports, 0);
+        for f in ["trace.csv", "trace.json", "conversions.json"] {
+            assert!(s.rsmf_dir.join(f).exists(), "{}", f);
+        }
         assert!(crate::audit::verify(&s.log_dir.join("audit.jsonl")).is_ok());
         for f in ["audit.log", "hashes.csv", "environment.json"] {
             assert!(s.log_dir.join(f).exists(), "{}", f);

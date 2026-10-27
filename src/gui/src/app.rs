@@ -19,6 +19,7 @@ const CYAN: egui::Color32 = egui::Color32::from_rgb(0x00, 0xE5, 0xFF);
 const MIST: egui::Color32 = egui::Color32::from_rgb(0xE6, 0xE6, 0xE6);
 const UI_LANGS: [(&str, &str); 3] = [("en", "English"), ("es", "Español"), ("fr", "Français")];
 
+#[allow(clippy::large_enum_variant)] // events are small and short-lived; boxing adds nothing measurable
 enum Msg {
     Event(Event),
     Done(Result<RunSummary, String>),

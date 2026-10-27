@@ -3,10 +3,13 @@
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use rv_rsmf_core::convert::{self, ConvertOptions};
+use rv_rsmf_core::model::SourceKind;
+use rv_rsmf_core::sources::{self, CsvProfile, DateOrder, ParseOptions};
 use rv_rsmf_core::trust::{self, DEFAULT_TSA};
 use rv_rsmf_core::{
-    CASE_ROLE, Event, HashAlgo, RunConfig, TOOL_NAME, TOOL_VERSION, audit, case, hash, i18n, run,
-    verify,
+    CASE_ROLE, Event, HashAlgo, RunConfig, TOOL_NAME, TOOL_VERSION, audit, case, hash, i18n, rsmf,
+    run, verify,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -20,49 +23,60 @@ const EXIT_USAGE: u8 = 2;
 const EXIT_FINDINGS: u8 = 3;
 const EXIT_CANCELLED: u8 = 130;
 
-const ABOUT: &str = "Inventory digital evidence: hash every file with one or two algorithms, detect its real type, flag anomalies and write court-ready reports with a tamper-evident audit log.";
+const ABOUT: &str = "Convert chat exports (WhatsApp, Telegram, Microsoft Teams .msg, mobile-tool CSV) to RSMF 2.0 files for Relativity, validated, traced message by message and recorded in a tamper-evident audit log.";
 
 const LONG_ABOUT: &str = "\
 DESCRIPTION:
-  rv-rsmf reviews a single file, a whole folder (bulk) or a list of files. For every file it:
-    1. opens the file read-only and hashes it in one pass with one or two algorithms;
-    2. detects the real file type from its signature (magic bytes);
-    3. flags empty files, extensions that do not match the content, programs hidden under
-       another name and duplicated content;
-    4. writes a technical report and a customer-friendly summary (HTML, PDF and JSON).
-  Each run also writes a statistics report and an audit trail under <OUT>/logs/<RUN-ID>/.
-  Every action is appended to a hash-chained log that `rv-rsmf verify-log` can check later.
+  rv-rsmf converts chat exports into RSMF 2.0 (Relativity Short Message Format) files. It:
+    1. opens every input file read-only and hashes it with one or two algorithms (and, in a case
+       folder, checks it against the evidence registry);
+    2. groups the files into exports: a WhatsApp .txt/.zip, a Telegram Desktop result.json, a folder
+       of Microsoft Teams .msg files (Purview), or a CSV with a column mapping; media next to an
+       export belong to it;
+    3. reads each export into one model: participants, conversations, messages, attachments,
+       reactions, with the line or id each message came from; local times are converted to UTC
+       with --timezone (required when the export has no UTC offset);
+    4. writes one .rsmf per conversation per day (days over 10,000 events are split), byte-for-byte
+       reproducible, then checks each file against the official RSMF 2.0 schema plus stricter rules
+       and reads it back;
+    5. writes trace.csv (source line -> RSMF file and event), and per-export technical reports,
+       customer summaries and custody forms (HTML, PDF and JSON).
+  It does NOT authenticate the export or recover deleted messages: the RSMF shows what the export
+  contains. Every action is appended to a hash-chained log that `rv-rsmf verify-log` checks.
 
-  CASE FOLDER (--case-dir): Rakvor tools share one folder per case. rv-rsmf is the intake tool: it
-  registers every hashed file in evidence/registry.json (evidence ids E0001, E0002, ...) so later tools
-  can prove they examined bit-identical copies. `rv-rsmf verify-case <CASE>` checks it all.";
+  CASE FOLDER (--case-dir): Rakvor tools share one folder per case. rv-rsmf is an analysis tool: it
+  re-hashes every file and compares it with evidence/registry.json, written by the intake tool
+  rv-hashinv (add --intake hashinv to run rv-hashinv first). `rv-rsmf verify-case <CASE>` checks it all.";
 
 const SCAN_AFTER_HELP: &str = "\
 EXAMPLES:
-  Review one file (SHA-256, English reports):
-    rv-rsmf scan --input evidence/contract.pdf
-  Review a folder and its subfolders with SHA-256 + MD5, Spanish reports, for case CASE-2026-014:
-    rv-rsmf scan -i D:\\evidence -r --hash sha256,md5 --lang es --case CASE-2026-014
-  Review the files listed in a text file, reports in the three languages, machine-readable progress:
-    rv-rsmf scan --input-list files.txt --lang all --progress jsonl > events.jsonl
-  Verify the audit log afterwards:
-    rv-rsmf verify-log rakvor-out/logs/<RUN-ID>/audit.jsonl
-  Open a case folder and register the evidence (intake), then verify the whole case:
-    rv-rsmf scan -i D:\\evidence -r --case-dir E:\\CASE-014 --case CASE-014 --jurisdiction fr
+  Convert an Android WhatsApp export (phone set to Paris time), Spanish reports:
+    rv-rsmf convert -i \"D:\\export\\WhatsApp Chat with Ana.txt\" --timezone Europe/Paris --lang es
+  Check the dates first, then convert an ambiguous export (all days <= 12) read as day/month/year:
+    rv-rsmf preview -i chat.txt --timezone America/Bogota
+    rv-rsmf convert -i chat.txt --timezone America/Bogota --date-order dmy --custodian \"Ana Ruiz\"
+  Convert a Telegram Desktop export (times are UTC in the export) and a folder of Teams .msg files:
+    rv-rsmf convert -i D:\\telegram\\result.json -i D:\\purview\\teams -r
+  Convert an XRY-style CSV with your own column mapping:
+    rv-rsmf convert -i chats.csv --csv-map xry.toml --timezone Europe/Madrid
+  In a case folder, registering the evidence with rv-hashinv first, then verify the case:
+    rv-rsmf convert -i D:\\export -r --case-dir E:\\CASE-014 --case CASE-014 --timezone Europe/Paris --intake hashinv
     rv-rsmf verify-case E:\\CASE-014
-  Re-examine two registered items of the case:
-    rv-rsmf scan --case-dir E:\\CASE-014 --evidence E0001,E0002
+  Check any .rsmf file (ours or another tool's):
+    rv-rsmf validate out\\rsmf\\<RUN-ID>\\001-chat\\Ana-Bob-1a2b3c\\2026-03-02.rsmf
 
 EXIT CODES:
   0    Completed; no high-severity finding.
   1    Runtime error (input not found, output not writable, case log locked, ...).
        See the audit log.
-  2    Usage error (unknown option, more than two hash algorithms, unsupported language).
+  2    Usage error (unknown option, more than two hash algorithms, unsupported language), or a
+       decision only the examiner can make: --timezone missing for an export without UTC
+       offsets, --date-order needed for ambiguous dates, CSV columns not mapped.
        With --case-dir: folder of another case or schema, --case missing when creating the
        case, unknown evidence id.
-  3    Completed with at least one high-severity finding (e.g. unreadable file, program under
-       another name, evidence that differs from the case registry), or the case folder fails
-       verification (nothing is written to it).
+  3    Completed with at least one high-severity finding (an export that could not be read, an
+       RSMF file that fails validation or read-back, evidence that differs from the case
+       registry), or the case folder fails verification (nothing is written to it).
   130  Cancelled with Ctrl+C. Partial reports and the cancellation are written to the audit log.
 
 FILES WRITTEN:
@@ -75,7 +89,10 @@ FILES WRITTEN:
   <OUT>/reports/<RUN-ID>/items/<NNNNN>-<NAME>/summary.json|.<LANG>.html|.<LANG>.pdf     Customer summary.
   <OUT>/reports/<RUN-ID>/items/<NNNNN>-<NAME>/custody.json|.<es|fr>.html|.pdf|.en.html|.pdf  Custody form.
   <OUT>/logs/<RUN-ID>/timestamp-<SEQ>.tsr|.json  RFC 3161 token for the audit chain head.
-  With --case-dir <CASE>, logs/ and reports/ go to <CASE>/runs/rv-rsmf/<RUN-ID>/, plus:
+  <OUT>/rsmf/<RUN-ID>/<NNN>-<EXPORT>/<CONVERSATION>/<YYYY-MM-DD>[-partNN].rsmf  RSMF 2.0 files.
+  <OUT>/rsmf/<RUN-ID>/trace.csv|.json     Every message: source file and line -> RSMF file and event id.
+  <OUT>/rsmf/<RUN-ID>/conversions.json    Exports, conversations, files, validation results.
+  With --case-dir <CASE>, logs/, reports/ and rsmf/ go to <CASE>/runs/rv-rsmf/<RUN-ID>/, plus:
   <CASE>/case.json                        Case id, jurisdiction, creation (written once).
   <CASE>/case-log.jsonl                   Hash-chained case log of every tool: case_created,
                                           run_started, evidence_registered, run_finished.
@@ -88,7 +105,14 @@ FORENSIC NOTES:
     line is detected by `verify-log`. Removing the last lines is detected only against a record
     kept outside the log: the RFC 3161 timestamp or, with --case-dir, the case log. Keep the log
     folder with the reports.
-  - A file without findings is not proven authentic; read the Limitations section of each report.
+  - A chat export is an editable text/JSON file: rv-rsmf converts, it does not authenticate. The
+    RSMF reproduces the export, not the phone: deleted messages and unexported media are absent.
+  - Times without a UTC offset are converted with --timezone; the original text of every time is
+    kept in the event's custom field source_time and in trace.csv. DST changes are reported.
+  - The same export and options always produce byte-identical .rsmf files (sorted zip entries,
+    fixed zip times, content-derived MIME boundary): anyone can re-run and compare the SHA-256.
+  - Each .rsmf is checked against the official RSMF 2.0 JSON schema (Relativity, BSD-3) plus
+    stricter rules (unknown keys, references, UTC times, counts) and read back before reporting.
   - MD5 and SHA-1 are accepted for compatibility with older case files; pair them with SHA-256 or BLAKE3.
   - The chain head is timestamped by an RFC 3161 authority (proves when the log existed). Offline? The run
     finishes with `timestamp_pending`; run `rv-rsmf timestamp <LOG>` later.
@@ -109,9 +133,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Hash, check and report on a file, a folder or a list of files.
-    #[command(long_about = LONG_ABOUT, after_long_help = SCAN_AFTER_HELP)]
-    Scan(Box<ScanArgs>),
+    /// Convert chat exports to RSMF 2.0 files (validated, traced, with reports and custody forms).
+    #[command(long_about = LONG_ABOUT, after_long_help = SCAN_AFTER_HELP, alias = "scan")]
+    Convert(Box<ScanArgs>),
+    /// Show how an export will be read (source, date order, time zone, first messages) without writing anything.
+    #[command(after_long_help = PREVIEW_AFTER_HELP)]
+    Preview(Box<PreviewArgs>),
+    /// Check .rsmf files against the RSMF 2.0 schema and rv-rsmf's stricter rules, and read them back.
+    #[command(after_long_help = VALIDATE_AFTER_HELP)]
+    Validate {
+        /// .rsmf files (ours or another tool's). Folders are searched recursively for *.rsmf.
+        /// Default: none (required). Example: rv-rsmf validate out\rsmf\<RUN-ID>
+        #[arg(required = true, value_name = "FILE", verbatim_doc_comment)]
+        files: Vec<PathBuf>,
+    },
     /// Verify an audit log (audit.jsonl): edited, deleted or re-ordered entries, and truncation.
     #[command(after_long_help = "\
 CHECKS:
@@ -379,12 +414,202 @@ struct ScanArgs {
         verbatim_doc_comment
     )]
     evidence: Vec<String>,
+
+    #[command(flatten)]
+    chat: ChatArgs,
+
+    /// Register the evidence with the intake tool first: hashinv runs RV HashInv
+    /// (`rv-hashinv scan --case-dir`) on the same --input/--input-list, so the case gets its hash
+    /// inventory, hash reports and evidence registry from rv-hashinv itself; then every export is
+    /// converted and verified against that registry. Needs --case-dir; not with --evidence.
+    /// rv-hashinv is searched in: --hashinv-exe, RV_HASHINV, next to rv-rsmf, the RV HashInv
+    /// install folder, PATH. Its path, version and SHA-256 go into this run's audit log.
+    /// Default: none. Example: --case-dir E:\CASE-014 --case CASE-014 -i D:\export -r --intake hashinv
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = Intake::None,
+        requires = "case_dir",
+        hide_default_value = true,
+        hide_possible_values = true,
+        verbatim_doc_comment
+    )]
+    intake: Intake,
+
+    /// rv-hashinv executable for --intake hashinv (needs version 0.3.0 or later).
+    /// Default: searched (see --intake). Example: --hashinv-exe "C:\Tools\RV HashInv\rv-hashinv.exe"
+    #[arg(long, value_name = "EXE", verbatim_doc_comment)]
+    hashinv_exe: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum Intake {
+    /// The case registry already exists (rv-hashinv was run before), or no case folder.
+    None,
+    /// Run rv-hashinv on the same evidence first.
+    Hashinv,
+}
+
+/// How the chat exports are read (shared by `convert` and `preview`).
+#[derive(Args, Clone, Debug)]
+struct ChatArgs {
+    /// Export type: whatsapp, telegram, teams-msg or csv. Forces the reader for files that would
+    /// otherwise not be recognised (e.g. a renamed WhatsApp .txt).
+    /// Default: detected from each file's name and content. Example: --source whatsapp
+    #[arg(long, value_name = "TYPE", value_parser = ["whatsapp", "telegram", "teams-msg", "csv"], hide_possible_values = true, verbatim_doc_comment)]
+    source: Option<String>,
+
+    /// Time zone the phone or tool used when the export was made (IANA name). Required for
+    /// WhatsApp and CSV exports, whose times have no UTC offset; also used to cut the days.
+    /// Default: none (UTC for slicing exports whose times carry an offset). Example: --timezone Europe/Paris
+    #[arg(short = 'z', long, value_name = "TZ", verbatim_doc_comment)]
+    timezone: Option<String>,
+
+    /// Order of day, month and year in numeric dates: dmy, mdy or ymd. Needed only when the
+    /// export does not decide it (every day and month <= 12); otherwise inferred and reported.
+    /// Default: inferred from the file. Example: --date-order dmy
+    #[arg(long, value_name = "ORDER", value_parser = ["dmy", "mdy", "ymd"], hide_possible_values = true, verbatim_doc_comment)]
+    date_order: Option<String>,
+
+    /// Device owner as named in the export (or their number). Becomes the RSMF custodian and From
+    /// header; WhatsApp authors written as "You"/"Tú"/"Vous" are given this name.
+    /// Default: none. Example: --custodian "Ana Ruiz"
+    #[arg(long, value_name = "NAME", verbatim_doc_comment)]
+    custodian: Option<String>,
+
+    /// CSV column mapping (TOML: [columns] timestamp, timestamp_format, conversation, sender, body,
+    /// …; [options] delimiter, encoding). See docs/usage.md.
+    /// Default: none (the --csv-profile columns). Example: --csv-map xry.toml
+    #[arg(long, value_name = "TOML", verbatim_doc_comment)]
+    csv_map: Option<PathBuf>,
+
+    /// Built-in CSV column profile: generic, xry-draft or cellebrite-draft. The two tool profiles
+    /// are drafts (not yet checked against real exports) and are reported as such.
+    /// Default: generic. Example: --csv-profile xry-draft
+    #[arg(long, value_name = "PROFILE", default_value = "generic", value_parser = ["generic", "xry-draft", "cellebrite-draft"], hide_default_value = true, hide_possible_values = true, verbatim_doc_comment)]
+    csv_profile: String,
+
+    /// Name shown as the platform in Relativity (RSMF platform / X-RSMF-Application).
+    /// Default: WhatsApp, Telegram, Microsoft Teams or Mobile export. Example: --platform-name "WhatsApp Business"
+    #[arg(long, value_name = "NAME", verbatim_doc_comment)]
+    platform_name: Option<String>,
+}
+
+#[derive(Args)]
+struct PreviewArgs {
+    /// Export file or folder to preview. Repeat for several.
+    /// Default: none (required). Example: -i chat.txt
+    #[arg(
+        short,
+        long = "input",
+        value_name = "PATH",
+        required = true,
+        verbatim_doc_comment
+    )]
+    inputs: Vec<PathBuf>,
+
+    /// Also look in subfolders.
+    /// Default: off. Example: -i D:\export -r
+    #[arg(short, long, verbatim_doc_comment)]
+    recursive: bool,
+
+    /// Messages to show per export.
+    /// Default: 20. Example: --limit 50
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = 20,
+        hide_default_value = true,
+        verbatim_doc_comment
+    )]
+    limit: usize,
+
+    /// Print JSON (one object per export) instead of text.
+    /// Default: off. Example: --json
+    #[arg(long, verbatim_doc_comment)]
+    json: bool,
+
+    #[command(flatten)]
+    chat: ChatArgs,
+}
+
+const PREVIEW_AFTER_HELP: &str = "\
+EXAMPLES:
+  rv-rsmf preview -i chat.txt --timezone Europe/Paris
+  rv-rsmf preview -i D:\\telegram\\result.json --limit 5 --json
+
+EXIT CODES:
+  0  Every export can be converted with these options.
+  1  An export could not be read (damaged or unsupported format).
+  2  A decision is needed: --timezone, --date-order or a CSV mapping (the message says which).
+
+FORENSIC NOTES:
+  - Nothing is written and nothing is logged: preview is for choosing options before `convert`,
+    which records every choice in its audit log.";
+
+const VALIDATE_AFTER_HELP: &str = "\
+EXAMPLES:
+  rv-rsmf validate out\\rsmf\\<RUN-ID>
+  rv-rsmf validate other-vendor.rsmf
+
+EXIT CODES:
+  0  Every file passes the RSMF 2.0 schema and the strict checks.
+  1  A file could not be read (not an RSMF message, no rsmf.zip, damaged zip).
+  3  At least one file fails validation (each problem is printed).
+
+FORENSIC NOTES:
+  - Checks: the official RSMF 2.0 JSON schema (bundled, from Relativity's rsmf-validator-samples);
+    unknown keys; participant, conversation and parent references; UTC timestamps; every
+    attachment, avatar and icon present in rsmf.zip; X-RSMF-Version/EventCount/AttachmentCount
+    agree with the manifest; at most 10,000 events per file.
+  - It does not check how a given Relativity version displays the file.";
+
+/// Builds the conversion options from the shared chat arguments (usage errors as text).
+fn convert_options(c: &ChatArgs) -> Result<ConvertOptions, String> {
+    let timezone = match &c.timezone {
+        None => None,
+        Some(z) => Some(z.parse::<chrono_tz::Tz>().map_err(|_| {
+            format!(
+                "unknown time zone '{z}': use an IANA name such as Europe/Paris or America/Bogota"
+            )
+        })?),
+    };
+    Ok(ConvertOptions {
+        parse: ParseOptions {
+            source: c.source.as_deref().and_then(SourceKind::parse),
+            timezone,
+            date_order: c.date_order.as_deref().and_then(DateOrder::parse),
+            csv_map: c.csv_map.clone(),
+            csv_profile: CsvProfile::parse(&c.csv_profile).unwrap_or(CsvProfile::Generic),
+            custodian: c.custodian.clone(),
+        },
+        platform_name: c.platform_name.clone(),
+    })
+}
+
+/// Usage errors in the exports (time zone, date order, mapping) stop before any output (exit 2).
+fn check_exports(
+    inputs: &[PathBuf],
+    list: Option<&std::path::Path>,
+    recursive: bool,
+    opts: &ConvertOptions,
+) -> Result<(), u8> {
+    let files: Vec<PathBuf> = match rv_rsmf_core::input::collect(inputs, list, recursive) {
+        Ok(items) => items.into_iter().map(|i| i.path).collect(),
+        Err(_) => return Ok(()), // the run reports missing inputs itself (exit 1, audited)
+    };
+    match convert::preflight(&files, opts) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(usage_error(&e.to_string())),
+    }
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     ExitCode::from(match cli.command {
-        Command::Scan(a) => scan(*a),
+        Command::Convert(a) => scan(*a),
+        Command::Preview(a) => preview(*a),
+        Command::Validate { files } => validate(files),
         Command::VerifyLog { log } => verify_log(log),
         Command::VerifyCase { case, rehash } => verify_case(case, rehash),
         Command::SelfTest => self_test(),
@@ -432,7 +657,31 @@ fn scan(a: ScanArgs) -> u8 {
         Ok(ids) => ids,
         Err(e) => return usage_error(&e.message),
     };
-    if let Some(dir) = &a.case_dir {
+    let convert_opts = match convert_options(&a.chat) {
+        Ok(o) => o,
+        Err(e) => return usage_error(&e),
+    };
+    let intake = a.intake == Intake::Hashinv;
+    if intake && !a.evidence.is_empty() {
+        return usage_error(
+            "--intake hashinv registers new evidence: it cannot be combined with --evidence",
+        );
+    }
+    if intake && a.inputs.is_empty() && a.input_list.is_none() {
+        return usage_error(
+            "--intake hashinv needs the evidence to register (--input or --input-list)",
+        );
+    }
+    if let Err(code) = check_exports(
+        &a.inputs,
+        a.input_list.as_deref(),
+        a.recursive,
+        &convert_opts,
+    ) {
+        return code;
+    }
+    // With --intake the case may not exist yet: rv-hashinv creates it, and the core checks it afterwards.
+    if let Some(dir) = a.case_dir.as_ref().filter(|_| !intake) {
         // Case problems found before the run map to their own exit codes (2 usage, 3 broken case).
         if let Err(e) = case::preflight(dir, a.case_id.as_deref(), &evidence_ids) {
             return match e.exit_code() {
@@ -477,6 +726,9 @@ fn scan(a: ScanArgs) -> u8 {
         case_dir: a.case_dir.clone(),
         evidence_ids,
         case_role: CASE_ROLE,
+        convert: convert_opts,
+        intake_hashinv: intake,
+        hashinv_exe: a.hashinv_exe.clone(),
     };
 
     let bar = match a.progress {
@@ -523,6 +775,26 @@ fn scan(a: ScanArgs) -> u8 {
                     "warning: {}: {}",
                     path.as_deref().unwrap_or("-"),
                     message
+                )),
+                Event::IntakeStarted { version, path, .. } => {
+                    b.println(format!("intake: rv-hashinv {version} ({path}) registers the evidence"))
+                }
+                Event::IntakeProgress { done, total, .. } => {
+                    b.set_message(format!("intake {}/{} files", done, total))
+                }
+                Event::IntakeFinished { run_id, exit_code, items, report_dir, .. } => b.println(format!(
+                    "intake: rv-hashinv run {run_id} finished (exit {exit_code}, {items} files); hash reports: {}",
+                    report_dir.as_deref().unwrap_or("-")
+                )),
+                Event::ExportStarted { path, source, .. } => {
+                    b.set_message(format!("converting {source}: {path}"))
+                }
+                Event::RsmfWritten { valid: false, path, .. } => {
+                    b.println(format!("warning: {path} fails validation (see the report)"))
+                }
+                Event::ExportFinished { path, conversations, events, files, invalid, .. } => b.println(format!(
+                    "converted {path}: {conversations} conversation(s), {events} event(s), {files} RSMF file(s){}",
+                    if *invalid > 0 { format!(", {invalid} INVALID") } else { String::new() }
                 )),
                 Event::Cancelled { .. } => b.println("cancelled: writing partial reports..."),
                 Event::Timestamp { status, reason, .. } if status != "ok" => b.println(format!(
@@ -575,6 +847,26 @@ fn scan(a: ScanArgs) -> u8 {
                     logs = s.log_dir.display()
                 );
                 let _ = writeln!(std::io::stdout(), "{}", out);
+                let cv = &s.conversion;
+                let _ = writeln!(
+                    std::io::stdout(),
+                    "  rsmf:   {} export(s){}, {} conversation(s), {} event(s), {} file(s){} -> {}",
+                    cv.exports,
+                    if cv.exports_failed > 0 {
+                        format!(" ({} FAILED)", cv.exports_failed)
+                    } else {
+                        String::new()
+                    },
+                    cv.conversations,
+                    cv.events,
+                    cv.files,
+                    if cv.files_invalid > 0 {
+                        format!(" ({} INVALID)", cv.files_invalid)
+                    } else {
+                        String::new()
+                    },
+                    s.rsmf_dir.display()
+                );
                 if let Some(c) = &s.case {
                     let t = &c.tally;
                     let _ = writeln!(
@@ -787,4 +1079,161 @@ fn docs_cli() -> String {
         ));
     }
     out
+}
+
+fn preview(a: PreviewArgs) -> u8 {
+    let opts = match convert_options(&a.chat) {
+        Ok(o) => o,
+        Err(e) => return usage_error(&e),
+    };
+    let files: Vec<PathBuf> = match rv_rsmf_core::input::collect(&a.inputs, None, a.recursive) {
+        Ok(items) => items.into_iter().map(|i| i.path).collect(),
+        Err(e) => {
+            eprintln!("error: {e}");
+            return EXIT_ERROR;
+        }
+    };
+    let (exports, orphans) = sources::plan_exports(&files, opts.parse.source);
+    if exports.is_empty() {
+        eprintln!(
+            "error: no chat export found among {} file(s); use --source to force the type",
+            files.len()
+        );
+        return EXIT_ERROR;
+    }
+    let mut code = EXIT_OK;
+    let mut out = std::io::stdout().lock();
+    for e in &exports {
+        match sources::parse(e, &opts.parse) {
+            Ok(p) => {
+                let events = sources::preview_events(&p, a.limit);
+                if a.json {
+                    let v = serde_json::json!({
+                        "export": e.primary.display().to_string(), "source": e.kind.name(),
+                        "conversations": p.conversations.iter().map(|c| &c.display).collect::<Vec<_>>(),
+                        "participants": p.participants.iter().map(|x| &x.display).collect::<Vec<_>>(),
+                        "events": p.events.len(), "facts": p.facts,
+                        "findings": p.findings.iter().map(|f| &f.code).collect::<Vec<_>>(),
+                        "first": events.iter().map(|ev| serde_json::json!({"source_time": ev.source_time,
+                            "utc": ev.timestamp.as_ref().map(rsmf::rsmf_time), "participant": ev.participant.as_ref().and_then(|id| p.participant(id)).map(|x| &x.display),
+                            "body": ev.body.chars().take(120).collect::<String>(), "line": ev.source.line})).collect::<Vec<_>>(),
+                    });
+                    let _ = writeln!(out, "{}", v);
+                } else {
+                    let _ = writeln!(out, "{} [{}]", e.primary.display(), e.kind.name());
+                    for (k, v) in &p.facts {
+                        let _ = writeln!(out, "  {k}: {v}");
+                    }
+                    let _ = writeln!(
+                        out,
+                        "  conversations: {}  participants: {}  events: {}",
+                        p.conversations.len(),
+                        p.participants.len(),
+                        p.events.len()
+                    );
+                    for f in &p.findings {
+                        let _ = writeln!(out, "  finding: {} ({})", f.code, f.severity.key());
+                    }
+                    let _ = writeln!(
+                        out,
+                        "  {:<22} {:<22} {:<20} text",
+                        "as written", "UTC", "from"
+                    );
+                    for ev in events {
+                        let who = ev
+                            .participant
+                            .as_ref()
+                            .and_then(|id| p.participant(id))
+                            .map(|x| x.display.as_str())
+                            .unwrap_or("-");
+                        let _ = writeln!(
+                            out,
+                            "  {:<22} {:<22} {:<20} {}",
+                            ev.source_time.chars().take(22).collect::<String>(),
+                            ev.timestamp
+                                .as_ref()
+                                .map(rsmf::rsmf_time)
+                                .unwrap_or_else(|| "-".into()),
+                            who.chars().take(20).collect::<String>(),
+                            ev.body
+                                .replace('\n', " ")
+                                .chars()
+                                .take(60)
+                                .collect::<String>()
+                        );
+                    }
+                }
+            }
+            Err(err) if err.is_usage() => {
+                eprintln!("error: {}: {}", e.primary.display(), err);
+                code = EXIT_USAGE;
+            }
+            Err(err) => {
+                eprintln!("error: {}: {}", e.primary.display(), err);
+                if code == EXIT_OK {
+                    code = EXIT_ERROR;
+                }
+            }
+        }
+    }
+    if !orphans.is_empty() && !a.json {
+        let _ = writeln!(out, "not part of any export: {} file(s)", orphans.len());
+    }
+    code
+}
+
+fn validate(paths: Vec<PathBuf>) -> u8 {
+    let mut files = vec![];
+    for p in paths {
+        if p.is_dir() {
+            for e in walkdir::WalkDir::new(&p)
+                .sort_by_file_name()
+                .into_iter()
+                .flatten()
+            {
+                if e.path()
+                    .extension()
+                    .is_some_and(|x| x.eq_ignore_ascii_case("rsmf"))
+                {
+                    files.push(e.path().to_path_buf());
+                }
+            }
+        } else {
+            files.push(p);
+        }
+    }
+    if files.is_empty() {
+        eprintln!("error: no .rsmf file found");
+        return EXIT_ERROR;
+    }
+    let mut code = EXIT_OK;
+    for f in &files {
+        match rsmf::validate_file(f) {
+            Ok((v, _)) if v.ok() => println!(
+                "OK       {}  ({} events, {} attachments)",
+                f.display(),
+                v.events,
+                v.attachments
+            ),
+            Ok((v, _)) => {
+                println!("INVALID  {}", f.display());
+                for e in v
+                    .schema_errors
+                    .iter()
+                    .map(|e| format!("schema: {e}"))
+                    .chain(v.strict_errors.iter().map(|e| format!("strict: {e}")))
+                {
+                    println!("    {e}");
+                }
+                code = EXIT_FINDINGS;
+            }
+            Err(e) => {
+                println!("ERROR    {}: {e}", f.display());
+                if code == EXIT_OK {
+                    code = EXIT_ERROR;
+                }
+            }
+        }
+    }
+    code
 }

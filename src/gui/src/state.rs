@@ -407,6 +407,9 @@ impl GuiState {
             },
             evidence_ids: vec![],
             case_role: CASE_ROLE,
+            convert: rv_rsmf_core::convert::ConvertOptions::default(),
+            intake_hashinv: false,
+            hashinv_exe: None,
         })
     }
 

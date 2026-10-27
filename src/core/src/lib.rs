@@ -11,11 +11,13 @@
 pub mod analyzer;
 pub mod audit;
 pub mod case;
+pub mod convert;
 pub mod env;
 pub mod events;
 pub mod hash;
 pub mod i18n;
 pub mod input;
+pub mod intake;
 pub mod model;
 pub mod report;
 pub mod rsmf;

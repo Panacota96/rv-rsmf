@@ -21,24 +21,37 @@ flowchart LR
 
 ```text
 DESCRIPTION:
-  rv-rsmf reviews a single file, a whole folder (bulk) or a list of files. For every file it:
-    1. opens the file read-only and hashes it in one pass with one or two algorithms;
-    2. detects the real file type from its signature (magic bytes);
-    3. flags empty files, extensions that do not match the content, programs hidden under
-       another name and duplicated content;
-    4. writes a technical report and a customer-friendly summary (HTML, PDF and JSON).
-  Each run also writes a statistics report and an audit trail under <OUT>/logs/<RUN-ID>/.
-  Every action is appended to a hash-chained log that `rv-rsmf verify-log` can check later.
+  rv-rsmf converts chat exports into RSMF 2.0 (Relativity Short Message Format) files. It:
+    1. opens every input file read-only and hashes it with one or two algorithms (and, in a case
+       folder, checks it against the evidence registry);
+    2. groups the files into exports: a WhatsApp .txt/.zip, a Telegram Desktop result.json, a folder
+       of Microsoft Teams .msg files (Purview), or a CSV with a column mapping; media next to an
+       export belong to it;
+    3. reads each export into one model: participants, conversations, messages, attachments,
+       reactions, with the line or id each message came from; local times are converted to UTC
+       with --timezone (required when the export has no UTC offset);
+    4. writes one .rsmf per conversation per day (days over 10,000 events are split), byte-for-byte
+       reproducible, then checks each file against the official RSMF 2.0 schema plus stricter rules
+       and reads it back;
+    5. writes trace.csv (source line -> RSMF file and event), and per-export technical reports,
+       customer summaries and custody forms (HTML, PDF and JSON).
+  It does NOT authenticate the export or recover deleted messages: the RSMF shows what the export
+  contains. Every action is appended to a hash-chained log that `rv-rsmf verify-log` checks.
 
-  CASE FOLDER (--case-dir): Rakvor tools share one folder per case. rv-rsmf is the intake tool: it
-  registers every hashed file in evidence/registry.json (evidence ids E0001, E0002, ...) so later
-  tools
-  can prove they examined bit-identical copies. `rv-rsmf verify-case <CASE>` checks it all.
+  CASE FOLDER (--case-dir): Rakvor tools share one folder per case. rv-rsmf is an analysis tool: it
+  re-hashes every file and compares it with evidence/registry.json, written by the intake tool
+  rv-hashinv (add --intake hashinv to run rv-hashinv first). `rv-rsmf verify-case <CASE>` checks it
+  all.
 
 Usage: rv-rsmf <COMMAND>
 
 Commands:
-  scan         Hash, check and report on a file, a folder or a list of files
+  convert      Convert chat exports to RSMF 2.0 files (validated, traced, with reports and custody
+               forms)
+  preview      Show how an export will be read (source, date order, time zone, first messages)
+               without writing anything
+  validate     Check .rsmf files against the RSMF 2.0 schema and rv-rsmf's stricter rules, and read
+               them back
   verify-log   Verify an audit log (audit.jsonl): edited, deleted or re-ordered entries, and
                truncation
   self-test    Check every hash algorithm against known-answer test vectors
@@ -56,25 +69,33 @@ Options:
 Run `rv-rsmf <COMMAND> --help` for the options, examples and exit codes of each command.
 ```
 
-## rv-rsmf scan
+## rv-rsmf convert
 
 ```text
 DESCRIPTION:
-  rv-rsmf reviews a single file, a whole folder (bulk) or a list of files. For every file it:
-    1. opens the file read-only and hashes it in one pass with one or two algorithms;
-    2. detects the real file type from its signature (magic bytes);
-    3. flags empty files, extensions that do not match the content, programs hidden under
-       another name and duplicated content;
-    4. writes a technical report and a customer-friendly summary (HTML, PDF and JSON).
-  Each run also writes a statistics report and an audit trail under <OUT>/logs/<RUN-ID>/.
-  Every action is appended to a hash-chained log that `rv-rsmf verify-log` can check later.
+  rv-rsmf converts chat exports into RSMF 2.0 (Relativity Short Message Format) files. It:
+    1. opens every input file read-only and hashes it with one or two algorithms (and, in a case
+       folder, checks it against the evidence registry);
+    2. groups the files into exports: a WhatsApp .txt/.zip, a Telegram Desktop result.json, a folder
+       of Microsoft Teams .msg files (Purview), or a CSV with a column mapping; media next to an
+       export belong to it;
+    3. reads each export into one model: participants, conversations, messages, attachments,
+       reactions, with the line or id each message came from; local times are converted to UTC
+       with --timezone (required when the export has no UTC offset);
+    4. writes one .rsmf per conversation per day (days over 10,000 events are split), byte-for-byte
+       reproducible, then checks each file against the official RSMF 2.0 schema plus stricter rules
+       and reads it back;
+    5. writes trace.csv (source line -> RSMF file and event), and per-export technical reports,
+       customer summaries and custody forms (HTML, PDF and JSON).
+  It does NOT authenticate the export or recover deleted messages: the RSMF shows what the export
+  contains. Every action is appended to a hash-chained log that `rv-rsmf verify-log` checks.
 
-  CASE FOLDER (--case-dir): Rakvor tools share one folder per case. rv-rsmf is the intake tool: it
-  registers every hashed file in evidence/registry.json (evidence ids E0001, E0002, ...) so later
-  tools
-  can prove they examined bit-identical copies. `rv-rsmf verify-case <CASE>` checks it all.
+  CASE FOLDER (--case-dir): Rakvor tools share one folder per case. rv-rsmf is an analysis tool: it
+  re-hashes every file and compares it with evidence/registry.json, written by the intake tool
+  rv-hashinv (add --intake hashinv to run rv-hashinv first). `rv-rsmf verify-case <CASE>` checks it
+  all.
 
-Usage: rv-rsmf scan [OPTIONS]
+Usage: rv-rsmf convert [OPTIONS]
 
 Options:
   -i, --input <PATH>
@@ -177,34 +198,90 @@ Options:
           Default: none (the --input files, or every registered item)
           Example: --evidence E0001,E0007
 
+      --source <TYPE>
+          Export type: whatsapp, telegram, teams-msg or csv. Forces the reader for files that would
+          otherwise not be recognised (e.g. a renamed WhatsApp .txt).
+          Default: detected from each file's name and content. Example: --source whatsapp
+
+  -z, --timezone <TZ>
+          Time zone the phone or tool used when the export was made (IANA name). Required for
+          WhatsApp and CSV exports, whose times have no UTC offset; also used to cut the days.
+          Default: none (UTC for slicing exports whose times carry an offset). Example: --timezone
+          Europe/Paris
+
+      --date-order <ORDER>
+          Order of day, month and year in numeric dates: dmy, mdy or ymd. Needed only when the
+          export does not decide it (every day and month <= 12); otherwise inferred and reported.
+          Default: inferred from the file. Example: --date-order dmy
+
+      --custodian <NAME>
+          Device owner as named in the export (or their number). Becomes the RSMF custodian and From
+          header; WhatsApp authors written as "You"/"Tú"/"Vous" are given this name.
+          Default: none. Example: --custodian "Ana Ruiz"
+
+      --csv-map <TOML>
+          CSV column mapping (TOML: [columns] timestamp, timestamp_format, conversation, sender,
+          body,
+          …; [options] delimiter, encoding). See docs/usage.md.
+          Default: none (the --csv-profile columns). Example: --csv-map xry.toml
+
+      --csv-profile <PROFILE>
+          Built-in CSV column profile: generic, xry-draft or cellebrite-draft. The two tool profiles
+          are drafts (not yet checked against real exports) and are reported as such.
+          Default: generic. Example: --csv-profile xry-draft
+
+      --platform-name <NAME>
+          Name shown as the platform in Relativity (RSMF platform / X-RSMF-Application).
+          Default: WhatsApp, Telegram, Microsoft Teams or Mobile export. Example: --platform-name
+          "WhatsApp Business"
+
+      --intake <INTAKE>
+          Register the evidence with the intake tool first: hashinv runs RV HashInv
+          (`rv-hashinv scan --case-dir`) on the same --input/--input-list, so the case gets its hash
+          inventory, hash reports and evidence registry from rv-hashinv itself; then every export is
+          converted and verified against that registry. Needs --case-dir; not with --evidence.
+          rv-hashinv is searched in: --hashinv-exe, RV_HASHINV, next to rv-rsmf, the RV HashInv
+          install folder, PATH. Its path, version and SHA-256 go into this run's audit log.
+          Default: none. Example: --case-dir E:\CASE-014 --case CASE-014 -i D:\export -r --intake
+          hashinv
+
+      --hashinv-exe <EXE>
+          rv-hashinv executable for --intake hashinv (needs version 0.3.0 or later).
+          Default: searched (see --intake). Example: --hashinv-exe "C:\Tools\RV
+          HashInv\rv-hashinv.exe"
+
   -h, --help
           Print help (see a summary with '-h')
 
 EXAMPLES:
-  Review one file (SHA-256, English reports):
-    rv-rsmf scan --input evidence/contract.pdf
-  Review a folder and its subfolders with SHA-256 + MD5, Spanish reports, for case CASE-2026-014:
-    rv-rsmf scan -i D:\evidence -r --hash sha256,md5 --lang es --case CASE-2026-014
-  Review the files listed in a text file, reports in the three languages, machine-readable progress:
-    rv-rsmf scan --input-list files.txt --lang all --progress jsonl > events.jsonl
-  Verify the audit log afterwards:
-    rv-rsmf verify-log rakvor-out/logs/<RUN-ID>/audit.jsonl
-  Open a case folder and register the evidence (intake), then verify the whole case:
-    rv-rsmf scan -i D:\evidence -r --case-dir E:\CASE-014 --case CASE-014 --jurisdiction fr
+  Convert an Android WhatsApp export (phone set to Paris time), Spanish reports:
+    rv-rsmf convert -i "D:\export\WhatsApp Chat with Ana.txt" --timezone Europe/Paris --lang es
+  Check the dates first, then convert an ambiguous export (all days <= 12) read as day/month/year:
+    rv-rsmf preview -i chat.txt --timezone America/Bogota
+    rv-rsmf convert -i chat.txt --timezone America/Bogota --date-order dmy --custodian "Ana Ruiz"
+  Convert a Telegram Desktop export (times are UTC in the export) and a folder of Teams .msg files:
+    rv-rsmf convert -i D:\telegram\result.json -i D:\purview\teams -r
+  Convert an XRY-style CSV with your own column mapping:
+    rv-rsmf convert -i chats.csv --csv-map xry.toml --timezone Europe/Madrid
+  In a case folder, registering the evidence with rv-hashinv first, then verify the case:
+    rv-rsmf convert -i D:\export -r --case-dir E:\CASE-014 --case CASE-014 --timezone Europe/Paris
+    --intake hashinv
     rv-rsmf verify-case E:\CASE-014
-  Re-examine two registered items of the case:
-    rv-rsmf scan --case-dir E:\CASE-014 --evidence E0001,E0002
+  Check any .rsmf file (ours or another tool's):
+    rv-rsmf validate out\rsmf\<RUN-ID>\001-chat\Ana-Bob-1a2b3c\2026-03-02.rsmf
 
 EXIT CODES:
   0    Completed; no high-severity finding.
   1    Runtime error (input not found, output not writable, case log locked, ...).
        See the audit log.
-  2    Usage error (unknown option, more than two hash algorithms, unsupported language).
+  2    Usage error (unknown option, more than two hash algorithms, unsupported language), or a
+       decision only the examiner can make: --timezone missing for an export without UTC
+       offsets, --date-order needed for ambiguous dates, CSV columns not mapped.
        With --case-dir: folder of another case or schema, --case missing when creating the
        case, unknown evidence id.
-  3    Completed with at least one high-severity finding (e.g. unreadable file, program under
-       another name, evidence that differs from the case registry), or the case folder fails
-       verification (nothing is written to it).
+  3    Completed with at least one high-severity finding (an export that could not be read, an
+       RSMF file that fails validation or read-back, evidence that differs from the case
+       registry), or the case folder fails verification (nothing is written to it).
   130  Cancelled with Ctrl+C. Partial reports and the cancellation are written to the audit log.
 
 FILES WRITTEN:
@@ -222,7 +299,11 @@ FILES WRITTEN:
   <OUT>/reports/<RUN-ID>/items/<NNNNN>-<NAME>/custody.json|.<es|fr>.html|.pdf|.en.html|.pdf  Custody
   form.
   <OUT>/logs/<RUN-ID>/timestamp-<SEQ>.tsr|.json  RFC 3161 token for the audit chain head.
-  With --case-dir <CASE>, logs/ and reports/ go to <CASE>/runs/rv-rsmf/<RUN-ID>/, plus:
+  <OUT>/rsmf/<RUN-ID>/<NNN>-<EXPORT>/<CONVERSATION>/<YYYY-MM-DD>[-partNN].rsmf  RSMF 2.0 files.
+  <OUT>/rsmf/<RUN-ID>/trace.csv|.json     Every message: source file and line -> RSMF file and event
+  id.
+  <OUT>/rsmf/<RUN-ID>/conversions.json    Exports, conversations, files, validation results.
+  With --case-dir <CASE>, logs/, reports/ and rsmf/ go to <CASE>/runs/rv-rsmf/<RUN-ID>/, plus:
   <CASE>/case.json                        Case id, jurisdiction, creation (written once).
   <CASE>/case-log.jsonl                   Hash-chained case log of every tool: case_created,
                                           run_started, evidence_registered, run_finished.
@@ -236,7 +317,14 @@ FORENSIC NOTES:
     line is detected by `verify-log`. Removing the last lines is detected only against a record
     kept outside the log: the RFC 3161 timestamp or, with --case-dir, the case log. Keep the log
     folder with the reports.
-  - A file without findings is not proven authentic; read the Limitations section of each report.
+  - A chat export is an editable text/JSON file: rv-rsmf converts, it does not authenticate. The
+    RSMF reproduces the export, not the phone: deleted messages and unexported media are absent.
+  - Times without a UTC offset are converted with --timezone; the original text of every time is
+    kept in the event's custom field source_time and in trace.csv. DST changes are reported.
+  - The same export and options always produce byte-identical .rsmf files (sorted zip entries,
+    fixed zip times, content-derived MIME boundary): anyone can re-run and compare the SHA-256.
+  - Each .rsmf is checked against the official RSMF 2.0 JSON schema (Relativity, BSD-3) plus
+    stricter rules (unknown keys, references, UTC times, counts) and read back before reporting.
   - MD5 and SHA-1 are accepted for compatibility with older case files; pair them with SHA-256 or
   BLAKE3.
   - The chain head is timestamped by an RFC 3161 authority (proves when the log existed). Offline?
@@ -249,6 +337,118 @@ FORENSIC NOTES:
     older than 10 minutes is reported as stale and never deleted automatically.
   - Each run's audit.jsonl records case_linked (the case-log entry it started from); the case
     log records the run's final audit head, so the two chains vouch for each other.
+```
+
+## rv-rsmf preview
+
+```text
+Show how an export will be read (source, date order, time zone, first messages) without writing
+anything
+
+Usage: rv-rsmf preview [OPTIONS] --input <PATH>
+
+Options:
+  -i, --input <PATH>
+          Export file or folder to preview. Repeat for several.
+          Default: none (required). Example: -i chat.txt
+
+  -r, --recursive
+          Also look in subfolders.
+          Default: off. Example: -i D:\export -r
+
+      --limit <N>
+          Messages to show per export.
+          Default: 20. Example: --limit 50
+
+      --json
+          Print JSON (one object per export) instead of text.
+          Default: off. Example: --json
+
+      --source <TYPE>
+          Export type: whatsapp, telegram, teams-msg or csv. Forces the reader for files that would
+          otherwise not be recognised (e.g. a renamed WhatsApp .txt).
+          Default: detected from each file's name and content. Example: --source whatsapp
+
+  -z, --timezone <TZ>
+          Time zone the phone or tool used when the export was made (IANA name). Required for
+          WhatsApp and CSV exports, whose times have no UTC offset; also used to cut the days.
+          Default: none (UTC for slicing exports whose times carry an offset). Example: --timezone
+          Europe/Paris
+
+      --date-order <ORDER>
+          Order of day, month and year in numeric dates: dmy, mdy or ymd. Needed only when the
+          export does not decide it (every day and month <= 12); otherwise inferred and reported.
+          Default: inferred from the file. Example: --date-order dmy
+
+      --custodian <NAME>
+          Device owner as named in the export (or their number). Becomes the RSMF custodian and From
+          header; WhatsApp authors written as "You"/"Tú"/"Vous" are given this name.
+          Default: none. Example: --custodian "Ana Ruiz"
+
+      --csv-map <TOML>
+          CSV column mapping (TOML: [columns] timestamp, timestamp_format, conversation, sender,
+          body,
+          …; [options] delimiter, encoding). See docs/usage.md.
+          Default: none (the --csv-profile columns). Example: --csv-map xry.toml
+
+      --csv-profile <PROFILE>
+          Built-in CSV column profile: generic, xry-draft or cellebrite-draft. The two tool profiles
+          are drafts (not yet checked against real exports) and are reported as such.
+          Default: generic. Example: --csv-profile xry-draft
+
+      --platform-name <NAME>
+          Name shown as the platform in Relativity (RSMF platform / X-RSMF-Application).
+          Default: WhatsApp, Telegram, Microsoft Teams or Mobile export. Example: --platform-name
+          "WhatsApp Business"
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+EXAMPLES:
+  rv-rsmf preview -i chat.txt --timezone Europe/Paris
+  rv-rsmf preview -i D:\telegram\result.json --limit 5 --json
+
+EXIT CODES:
+  0  Every export can be converted with these options.
+  1  An export could not be read (damaged or unsupported format).
+  2  A decision is needed: --timezone, --date-order or a CSV mapping (the message says which).
+
+FORENSIC NOTES:
+  - Nothing is written and nothing is logged: preview is for choosing options before `convert`,
+    which records every choice in its audit log.
+```
+
+## rv-rsmf validate
+
+```text
+Check .rsmf files against the RSMF 2.0 schema and rv-rsmf's stricter rules, and read them back
+
+Usage: rv-rsmf validate <FILE>...
+
+Arguments:
+  <FILE>...
+          .rsmf files (ours or another tool's). Folders are searched recursively for *.rsmf.
+          Default: none (required). Example: rv-rsmf validate out\rsmf\<RUN-ID>
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+EXAMPLES:
+  rv-rsmf validate out\rsmf\<RUN-ID>
+  rv-rsmf validate other-vendor.rsmf
+
+EXIT CODES:
+  0  Every file passes the RSMF 2.0 schema and the strict checks.
+  1  A file could not be read (not an RSMF message, no rsmf.zip, damaged zip).
+  3  At least one file fails validation (each problem is printed).
+
+FORENSIC NOTES:
+  - Checks: the official RSMF 2.0 JSON schema (bundled, from Relativity's rsmf-validator-samples);
+    unknown keys; participant, conversation and parent references; UTC timestamps; every
+    attachment, avatar and icon present in rsmf.zip; X-RSMF-Version/EventCount/AttachmentCount
+    agree with the manifest; at most 10,000 events per file.
+  - It does not check how a given Relativity version displays the file.
 ```
 
 ## rv-rsmf verify-log

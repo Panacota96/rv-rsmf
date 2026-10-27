@@ -111,6 +111,8 @@ pub struct ItemResult {
     /// registered | already_registered | verified | mismatch | not_in_registry
     pub case_status: Option<String>,
     pub intake_utc: Option<String>,
+    /// What the conversion stage produced for this item (chat exports and their members).
+    pub conversion: Option<crate::convert::ItemConversion>,
 }
 
 impl ItemResult {

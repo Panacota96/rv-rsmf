@@ -51,6 +51,50 @@ pub enum Event {
         elapsed_ms: u64,
         eta_ms: Option<u64>,
     },
+    /// `--intake hashinv`: rv-hashinv (the intake tool) is about to register the evidence.
+    IntakeStarted {
+        tool: String,
+        version: String,
+        path: String,
+        sha256: String,
+    },
+    /// Progress of the rv-hashinv intake (items hashed so far).
+    IntakeProgress {
+        done: u64,
+        total: u64,
+        elapsed_ms: u64,
+    },
+    /// rv-hashinv finished: its run id, exit code and where its hash reports are.
+    IntakeFinished {
+        run_id: String,
+        exit_code: i32,
+        items: u64,
+        errors: u64,
+        report_dir: Option<String>,
+    },
+    /// A chat export starts converting (its primary file's item index).
+    ExportStarted {
+        index: u64,
+        path: String,
+        source: String,
+    },
+    /// One .rsmf file written and checked (schema, strict checks, read back).
+    RsmfWritten {
+        path: String,
+        conversation: String,
+        day: Option<String>,
+        events: u64,
+        valid: bool,
+    },
+    /// A chat export finished converting.
+    ExportFinished {
+        index: u64,
+        path: String,
+        conversations: u64,
+        events: u64,
+        files: u64,
+        invalid: u64,
+    },
     ReportWritten {
         kind: String,
         path: String,
