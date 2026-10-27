@@ -1,0 +1,6 @@
+Synthetic sample for rv-rsmf tests - invented people only
+28.03.26, 23:59 - Eva Klein: Clocks go forward tonight
+29.03.26, 02:30 - Eva Klein: This local time does not exist in Paris
+29.03.26, 03:30 - Felix Braun: Summer time now
+25.10.26, 02:30 - Felix Braun: This local time happens twice
+25.10.26, 02:45 - Eva Klein: Me too

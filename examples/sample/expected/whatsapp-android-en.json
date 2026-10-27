@@ -1,0 +1,18 @@
+{
+  "source": "whatsapp",
+  "path": "whatsapp-android-en/WhatsApp Chat with Ana Ruiz.txt",
+  "options": {
+    "timezone": "Europe/Paris",
+    "date_order": null
+  },
+  "conversations": 1,
+  "events": 10,
+  "attachments_packed": 1,
+  "attachments_missing": 2,
+  "findings": [
+    "ATTACHMENT_REFERENCED_NOT_FOUND",
+    "DATE_ORDER_INFERRED",
+    "MEDIA_OMITTED_IN_EXPORT",
+    "PARTICIPANT_IDENTIFIED_BY_NUMBER_ONLY"
+  ]
+}

@@ -1,0 +1,355 @@
+{
+ "about": "Here is the data you requested. Synthetic sample for rv-rsmf tests: every person is invented.",
+ "personal_information": {
+  "user_id": 1000000001,
+  "first_name": "Gabriel",
+  "last_name": "Lenoir",
+  "phone_number": "+33 6 00 00 00 02",
+  "bio": ""
+ },
+ "chats": {
+  "about": "This page lists all chats from this export.",
+  "list": [
+   {
+    "name": "Hugo Martin",
+    "type": "personal_chat",
+    "id": 2000000001,
+    "messages": [
+     {
+      "id": 101,
+      "type": "message",
+      "date": "2026-03-02T10:00:00",
+      "date_unixtime": "1772442000",
+      "from": "Gabriel Lenoir",
+      "from_id": "user1000000001",
+      "text": "Voici la photo du tableau",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Voici la photo du tableau"
+       }
+      ],
+      "photo": "photos/photo_1@02-03-2026_10-00-00.jpg",
+      "width": 8,
+      "height": 8
+     },
+     {
+      "id": 102,
+      "type": "message",
+      "date": "2026-03-02T10:05:00",
+      "date_unixtime": "1772442300",
+      "from": "Hugo Martin",
+      "from_id": "user1000000002",
+      "text": [
+       "Merci ! Voir ",
+       {
+        "type": "text_link",
+        "text": "le dossier",
+        "href": "https://example.org/dossier"
+       },
+       " et ",
+       {
+        "type": "bold",
+        "text": "vite"
+       },
+       "."
+      ],
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Merci ! Voir "
+       },
+       {
+        "type": "text_link",
+        "text": "le dossier",
+        "href": "https://example.org/dossier"
+       },
+       {
+        "type": "plain",
+        "text": " et "
+       },
+       {
+        "type": "bold",
+        "text": "vite"
+       },
+       {
+        "type": "plain",
+        "text": "."
+       }
+      ],
+      "reply_to_message_id": 101,
+      "reactions": [
+       {
+        "type": "emoji",
+        "count": 1,
+        "emoji": "👍",
+        "recent": [
+         {
+          "from": "Gabriel Lenoir",
+          "from_id": "user1000000001",
+          "date": "2026-03-02T10:06:00"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": 103,
+      "type": "message",
+      "date": "2026-03-02T10:10:00",
+      "date_unixtime": "1772442600",
+      "from": "Gabriel Lenoir",
+      "from_id": "user1000000001",
+      "text": "Rendez-vous à 15 h (corrigé)",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Rendez-vous à 15 h (corrigé)"
+       }
+      ],
+      "edited": "2026-03-02T10:12:00",
+      "edited_unixtime": "1772442720"
+     },
+     {
+      "id": 104,
+      "type": "message",
+      "date": "2026-03-02T11:00:00",
+      "date_unixtime": "1772445600",
+      "from": "Hugo Martin",
+      "from_id": "user1000000002",
+      "text": "Le contrat",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Le contrat"
+       }
+      ],
+      "file": "(File not included. Change data exporting settings to download.)",
+      "file_name": "contrat.pdf",
+      "mime_type": "application/pdf"
+     },
+     {
+      "id": 105,
+      "type": "service",
+      "date": "2026-03-02T12:00:00",
+      "date_unixtime": "1772449200",
+      "actor": "Hugo Martin",
+      "actor_id": "user1000000002",
+      "action": "phone_call",
+      "duration_seconds": 125,
+      "discard_reason": "hangup",
+      "text": "",
+      "text_entities": []
+     },
+     {
+      "id": 106,
+      "type": "message",
+      "date": "2026-03-02T12:30:00",
+      "date_unixtime": "1772451000",
+      "from": "Gabriel Lenoir",
+      "from_id": "user1000000001",
+      "text": "",
+      "text_entities": [],
+      "contact_information": {
+       "first_name": "Julie",
+       "last_name": "Petit",
+       "phone_number": "+33 6 00 00 00 03"
+      }
+     },
+     {
+      "id": 107,
+      "type": "message",
+      "date": "2026-03-02T12:40:00",
+      "date_unixtime": "1772451600",
+      "from": "Hugo Martin",
+      "from_id": "user1000000002",
+      "text": "",
+      "text_entities": [],
+      "file": "voice_messages/audio_1@02-03-2026_12-40-00.ogg",
+      "file_name": "audio_1@02-03-2026_12-40-00.ogg",
+      "media_type": "voice_message",
+      "mime_type": "audio/ogg",
+      "duration_seconds": 4
+     }
+    ]
+   },
+   {
+    "name": "Équipe Atlas",
+    "type": "private_supergroup",
+    "id": 3000000001,
+    "messages": [
+     {
+      "id": 201,
+      "type": "service",
+      "date": "2026-03-03T09:00:00",
+      "date_unixtime": "1772524800",
+      "actor": "Gabriel Lenoir",
+      "actor_id": "user1000000001",
+      "action": "create_group",
+      "title": "Équipe Atlas",
+      "members": [
+       "Gabriel Lenoir"
+      ],
+      "text": "",
+      "text_entities": []
+     },
+     {
+      "id": 202,
+      "type": "service",
+      "date": "2026-03-03T09:01:00",
+      "date_unixtime": "1772524860",
+      "actor": "Gabriel Lenoir",
+      "actor_id": "user1000000001",
+      "action": "invite_members",
+      "members": [
+       "Iris Bonnet"
+      ],
+      "text": "",
+      "text_entities": []
+     },
+     {
+      "id": 203,
+      "type": "message",
+      "date": "2026-03-03T09:05:00",
+      "date_unixtime": "1772525100",
+      "from": "Iris Bonnet",
+      "from_id": "user1000000003",
+      "text": [
+       "Bonjour à tous, le lien : ",
+       {
+        "type": "link",
+        "text": "https://example.org/atlas"
+       }
+      ],
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Bonjour à tous, le lien : "
+       },
+       {
+        "type": "link",
+        "text": "https://example.org/atlas"
+       }
+      ],
+      "reactions": [
+       {
+        "type": "emoji",
+        "count": 2,
+        "emoji": "❤",
+        "recent": [
+         {
+          "from": "Gabriel Lenoir",
+          "from_id": "user1000000001",
+          "date": "2026-03-03T09:06:00"
+         },
+         {
+          "from": "Hugo Martin",
+          "from_id": "user1000000002",
+          "date": "2026-03-03T09:07:00"
+         }
+        ]
+       },
+       {
+        "type": "custom_emoji",
+        "count": 1,
+        "document_id": "stickers/custom_emoji_1.webp",
+        "recent": [
+         {
+          "from": "Iris Bonnet",
+          "from_id": "user1000000003",
+          "date": "2026-03-03T09:08:00"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": 204,
+      "type": "message",
+      "date": "2026-03-03T09:10:00",
+      "date_unixtime": "1772525400",
+      "from": "Gabriel Lenoir",
+      "from_id": "user1000000001",
+      "text": "Plan",
+      "text_entities": [
+       {
+        "type": "plain",
+        "text": "Plan"
+       }
+      ],
+      "photo": "photos/photo_2@03-03-2026_09-10-00.jpg",
+      "width": 8,
+      "height": 8
+     },
+     {
+      "id": 205,
+      "type": "message",
+      "date": "2026-03-03T09:15:00",
+      "date_unixtime": "1772525700",
+      "from": "Iris Bonnet",
+      "from_id": "user1000000003",
+      "text": "",
+      "text_entities": [],
+      "location_information": {
+       "latitude": 48.8566,
+       "longitude": 2.3522
+      }
+     },
+     {
+      "id": 206,
+      "type": "message",
+      "date": "2026-03-03T09:20:00",
+      "date_unixtime": "1772526000",
+      "from": "Gabriel Lenoir",
+      "from_id": "user1000000001",
+      "text": "",
+      "text_entities": [],
+      "poll": {
+       "question": "Réunion jeudi ?",
+       "closed": false,
+       "total_voters": 2,
+       "answers": [
+        {
+         "text": "Oui",
+         "voters": 2,
+         "chosen": true
+        },
+        {
+         "text": "Non",
+         "voters": 0,
+         "chosen": false
+        }
+       ]
+      }
+     },
+     {
+      "id": 207,
+      "type": "service",
+      "date": "2026-03-03T09:30:00",
+      "date_unixtime": "1772526600",
+      "actor": "Iris Bonnet",
+      "actor_id": "user1000000003",
+      "action": "pin_message",
+      "message_id": 203,
+      "text": "",
+      "text_entities": []
+     },
+     {
+      "id": 208,
+      "type": "service",
+      "date": "2026-03-03T18:00:00",
+      "date_unixtime": "1772557200",
+      "actor": "Iris Bonnet",
+      "actor_id": "user1000000003",
+      "action": "remove_members",
+      "members": [
+       "Iris Bonnet"
+      ],
+      "text": "",
+      "text_entities": []
+     }
+    ]
+   }
+  ]
+ }
+}
