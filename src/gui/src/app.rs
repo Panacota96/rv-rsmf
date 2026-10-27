@@ -92,6 +92,11 @@ impl HashInvApp {
         for p in paths {
             app.state.add_input(p);
         }
+        // Files dropped on the .exe (or given on the command line) are previewed at once, so the examiner
+        // sees how the dates are read before choosing anything.
+        if !app.state.inputs.is_empty() {
+            app.state.preview();
+        }
         app
     }
 
