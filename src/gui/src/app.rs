@@ -1,9 +1,13 @@
 //! The window. Drawing only: rules live in `state.rs`, work lives in the core (on a worker thread).
 //! Rakvor dark theme; interface language EN/ES/FR switchable at any time (texts from i18n "ui").
 
-use crate::state::{GuiState, Phase};
+use crate::state::{COMMON_ZONES, GuiState, Phase};
 use eframe::egui;
-use rv_rsmf_core::{Event, HashAlgo, RunConfig, RunSummary, TOOL_VERSION};
+use rv_rsmf_core::{
+    Event, HashAlgo, RunConfig, RunSummary, TOOL_VERSION,
+    model::SourceKind,
+    sources::{CsvProfile, DateOrder},
+};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +21,9 @@ const BLUE: egui::Color32 = egui::Color32::from_rgb(0x2A, 0x5C, 0xFF);
 const VIOLET: egui::Color32 = egui::Color32::from_rgb(0x6B, 0x00, 0xFF);
 const CYAN: egui::Color32 = egui::Color32::from_rgb(0x00, 0xE5, 0xFF);
 const MIST: egui::Color32 = egui::Color32::from_rgb(0xE6, 0xE6, 0xE6);
+const AMBER: egui::Color32 = egui::Color32::from_rgb(0xFF, 0xB0, 0x40);
+const RED: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x6B, 0x6B);
+const GREEN: egui::Color32 = egui::Color32::from_rgb(0x4C, 0xD9, 0x7B);
 const UI_LANGS: [(&str, &str); 3] = [("en", "English"), ("es", "Español"), ("fr", "Français")];
 
 #[allow(clippy::large_enum_variant)] // events are small and short-lived; boxing adds nothing measurable
@@ -34,6 +41,11 @@ pub struct HashInvApp {
     themed: bool,
     /// Case folder being typed; applied (and audited) when the field loses focus.
     case_entry: String,
+    /// Chat-export text fields being typed; applied (and audited) when the field loses focus.
+    tz_entry: String,
+    custodian_entry: String,
+    csv_map_entry: String,
+    platform_entry: String,
 }
 
 /// Applies the Rakvor dark theme.
@@ -67,6 +79,10 @@ impl HashInvApp {
             notice: None,
             themed: false,
             case_entry: String::new(),
+            tz_entry: String::new(),
+            custodian_entry: String::new(),
+            csv_map_entry: String::new(),
+            platform_entry: String::new(),
         }
     }
 
@@ -80,6 +96,11 @@ impl HashInvApp {
     }
 
     fn start(&mut self, ctx: &egui::Context) {
+        // Rule (state.rs): exports are previewed with the current settings; a usage problem stops here.
+        if let Err(e) = self.state.check_exports() {
+            self.notice = Some(e);
+            return;
+        }
         let cfg: RunConfig = match self.state.to_config() {
             Ok(c) => c,
             Err(e) => {
@@ -123,7 +144,10 @@ impl HashInvApp {
                     }
                     self.state.apply(&e)
                 }
-                Msg::Done(Ok(_)) => finished = true,
+                Msg::Done(Ok(summary)) => {
+                    self.state.finish(&summary);
+                    finished = true;
+                }
                 Msg::Done(Err(e)) => {
                     self.state.fail(e);
                     finished = true;
@@ -299,6 +323,362 @@ impl HashInvApp {
                     }
                 }
             });
+            if self.state.out_locked() {
+                ui.horizontal_wrapped(|ui| {
+                    let mut on = self.state.intake_hashinv;
+                    if ui
+                        .checkbox(&mut on, self.state.tr("intake_hashinv"))
+                        .changed()
+                    {
+                        self.state.set_intake_hashinv(on);
+                    }
+                    match &self.state.hashinv {
+                        Some(Ok(t)) if self.state.intake_hashinv => {
+                            ui.colored_label(GREEN, format!("rv-hashinv {}", t.version))
+                                .on_hover_text(format!(
+                                    "{}\nSHA-256 {}",
+                                    t.path.display(),
+                                    t.sha256
+                                ));
+                        }
+                        Some(Err(e)) if self.state.intake_hashinv => {
+                            ui.colored_label(RED, self.state.tr("intake_not_found"))
+                                .on_hover_text(e.as_str());
+                        }
+                        _ => {
+                            ui.weak(self.state.tr("intake_hint"));
+                        }
+                    }
+                });
+            }
+            self.chat_export_block(ui);
+        });
+        self.preview_panel(ui);
+    }
+
+    /// Draws `add` with an amber frame when `on` (a setting the preview says must be given).
+    fn highlighted<R>(ui: &mut egui::Ui, on: bool, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+        if !on {
+            return add(ui);
+        }
+        ui.scope(|ui| {
+            let w = &mut ui.visuals_mut().widgets;
+            for s in [&mut w.inactive, &mut w.hovered, &mut w.active] {
+                s.bg_stroke = egui::Stroke::new(2.0, AMBER);
+            }
+            add(ui)
+        })
+        .inner
+    }
+
+    fn chat_export_block(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new(self.state.tr("chat_export")).strong());
+        let csv = self.state.show_csv_options();
+        egui::Grid::new("chat-grid")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                // Source
+                ui.label(self.state.tr("source"));
+                let mut chosen = None;
+                egui::ComboBox::from_id_salt("source")
+                    .selected_text(self.state.source_label(self.state.source))
+                    .width(240.0)
+                    .show_ui(ui, |ui| {
+                        let opts =
+                            std::iter::once(None).chain(SourceKind::ALL.into_iter().map(Some));
+                        for k in opts {
+                            if ui
+                                .selectable_label(
+                                    self.state.source == k,
+                                    self.state.source_label(k),
+                                )
+                                .clicked()
+                            {
+                                chosen = Some(k);
+                            }
+                        }
+                    });
+                if let Some(k) = chosen {
+                    self.state.set_source(k);
+                }
+                ui.end_row();
+
+                // Time zone: free text + common zones
+                ui.label(self.state.tr("timezone"));
+                ui.horizontal(|ui| {
+                    let missing = self.state.timezone_missing();
+                    let hint = self.state.tr("timezone_hint");
+                    let r = Self::highlighted(ui, missing, |ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.tz_entry)
+                                .hint_text(hint)
+                                .desired_width(200.0),
+                        )
+                    });
+                    if r.lost_focus() && self.tz_entry.trim() != self.state.timezone {
+                        let v = self.tz_entry.clone();
+                        if let Err(e) = self.state.set_timezone(&v) {
+                            self.notice = Some(e);
+                        }
+                    }
+                    let mut pick = None;
+                    egui::ComboBox::from_id_salt("tz-common")
+                        .selected_text(self.state.tr("timezone_common"))
+                        .show_ui(ui, |ui| {
+                            for z in COMMON_ZONES {
+                                if ui.selectable_label(self.state.timezone == z, z).clicked() {
+                                    pick = Some(z);
+                                }
+                            }
+                        });
+                    if let Some(z) = pick {
+                        self.tz_entry = z.to_string();
+                        if let Err(e) = self.state.set_timezone(z) {
+                            self.notice = Some(e);
+                        }
+                    }
+                    if let Some(e) = &self.state.timezone_error {
+                        ui.colored_label(RED, self.state.tr("timezone_invalid"))
+                            .on_hover_text(e.as_str());
+                    } else if missing {
+                        ui.colored_label(AMBER, self.state.tr("required"));
+                    }
+                });
+                ui.end_row();
+
+                // Date order
+                ui.label(self.state.tr("date_order"));
+                ui.horizontal(|ui| {
+                    let missing = self.state.date_order_missing();
+                    let mut chosen = None;
+                    Self::highlighted(ui, missing, |ui| {
+                        egui::ComboBox::from_id_salt("date-order")
+                            .selected_text(self.state.date_order_label(self.state.date_order))
+                            .width(240.0)
+                            .show_ui(ui, |ui| {
+                                let opts = [
+                                    None,
+                                    Some(DateOrder::Dmy),
+                                    Some(DateOrder::Mdy),
+                                    Some(DateOrder::Ymd),
+                                ];
+                                for d in opts {
+                                    if ui
+                                        .selectable_label(
+                                            self.state.date_order == d,
+                                            self.state.date_order_label(d),
+                                        )
+                                        .clicked()
+                                    {
+                                        chosen = Some(d);
+                                    }
+                                }
+                            });
+                    });
+                    if let Some(d) = chosen {
+                        self.state.set_date_order(d);
+                    }
+                    if missing {
+                        ui.colored_label(AMBER, self.state.tr("required"));
+                    }
+                });
+                ui.end_row();
+
+                // Custodian: free text + participants found by the preview
+                ui.label(self.state.tr("custodian"));
+                ui.horizontal(|ui| {
+                    let hint = self.state.tr("custodian_hint");
+                    let r = ui.add(
+                        egui::TextEdit::singleline(&mut self.custodian_entry)
+                            .hint_text(hint)
+                            .desired_width(200.0),
+                    );
+                    if r.lost_focus() {
+                        let v = self.custodian_entry.clone();
+                        self.state.set_custodian(&v);
+                    }
+                    if !self.state.known_participants.is_empty() {
+                        let mut pick = None;
+                        egui::ComboBox::from_id_salt("custodian-found")
+                            .selected_text(self.state.tr("custodian_found"))
+                            .show_ui(ui, |ui| {
+                                for p in &self.state.known_participants {
+                                    if ui.selectable_label(self.state.custodian == *p, p).clicked()
+                                    {
+                                        pick = Some(p.clone());
+                                    }
+                                }
+                            });
+                        if let Some(p) = pick {
+                            self.custodian_entry = p.clone();
+                            self.state.set_custodian(&p);
+                        }
+                    }
+                });
+                ui.end_row();
+
+                if csv {
+                    ui.label(self.state.tr("csv_profile"));
+                    let mut chosen = None;
+                    egui::ComboBox::from_id_salt("csv-profile")
+                        .selected_text(self.state.csv_profile_label(self.state.csv_profile))
+                        .width(240.0)
+                        .show_ui(ui, |ui| {
+                            for p in [
+                                CsvProfile::Generic,
+                                CsvProfile::XryDraft,
+                                CsvProfile::CellebriteDraft,
+                            ] {
+                                if ui
+                                    .selectable_label(
+                                        self.state.csv_profile == p,
+                                        self.state.csv_profile_label(p),
+                                    )
+                                    .clicked()
+                                {
+                                    chosen = Some(p);
+                                }
+                            }
+                        });
+                    if let Some(p) = chosen {
+                        self.state.set_csv_profile(p);
+                    }
+                    ui.end_row();
+                    ui.label(self.state.tr("csv_map"));
+                    ui.horizontal(|ui| {
+                        let hint = self.state.tr("csv_map_hint");
+                        let r = ui.add(
+                            egui::TextEdit::singleline(&mut self.csv_map_entry)
+                                .hint_text(hint)
+                                .desired_width(280.0),
+                        );
+                        if r.lost_focus() {
+                            let v = self.csv_map_entry.clone();
+                            self.state.set_csv_map(&v);
+                        }
+                        #[cfg(windows)]
+                        if ui.button(self.state.tr("browse")).clicked() {
+                            if let Some(f) = rfd::FileDialog::new()
+                                .add_filter("TOML", &["toml"])
+                                .pick_file()
+                            {
+                                self.csv_map_entry = f.display().to_string();
+                                let v = self.csv_map_entry.clone();
+                                self.state.set_csv_map(&v);
+                            }
+                        }
+                    });
+                    ui.end_row();
+                }
+
+                ui.label(self.state.tr("platform"));
+                let hint = self.state.tr("platform_hint");
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut self.platform_entry)
+                        .hint_text(hint)
+                        .desired_width(280.0),
+                );
+                if r.lost_focus() {
+                    let v = self.platform_entry.clone();
+                    self.state.set_platform_name(&v);
+                }
+                ui.end_row();
+            });
+        if ui
+            .add_enabled(
+                !self.state.inputs.is_empty(),
+                egui::Button::new(self.state.tr("preview")),
+            )
+            .on_hover_text(self.state.tr("preview_tip"))
+            .clicked()
+        {
+            self.state.preview();
+        }
+    }
+
+    fn preview_panel(&mut self, ui: &mut egui::Ui) {
+        let Some(p) = self.state.preview.clone() else {
+            return;
+        };
+        egui::CollapsingHeader::new(format!(
+            "{} ({} {})",
+            self.state.tr("preview_title"),
+            p.exports.len(),
+            self.state.tr("exports")
+        ))
+        .id_salt("preview-panel")
+        .default_open(true)
+        .show(ui, |ui| {
+            if let Some(e) = &p.input_error {
+                ui.colored_label(
+                    AMBER,
+                    format!("{}: {e}", self.state.tr("preview_input_error")),
+                );
+            }
+            if let Some(u) = &p.usage {
+                ui.colored_label(AMBER, self.state.usage_help().unwrap_or_default());
+                ui.weak(u.path.display().to_string());
+                if !self.state.date_order_evidence.is_empty()
+                    && matches!(
+                        u.error,
+                        rv_rsmf_core::sources::ParseError::NeedsDateOrder { .. }
+                    )
+                {
+                    ui.label(self.state.tr("needs_date_order_evidence"));
+                    for l in &self.state.date_order_evidence {
+                        ui.monospace(l);
+                    }
+                }
+            } else if p.exports.is_empty() && p.input_error.is_none() {
+                ui.colored_label(AMBER, self.state.tr("preview_none"));
+            }
+            for (i, e) in p.exports.iter().enumerate() {
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("{}  [{}]", e.path, e.source.name())).strong(),
+                );
+                if let Some(err) = &e.error {
+                    ui.colored_label(AMBER, self.state.tr("preview_failed"));
+                    ui.weak(err.as_str());
+                    continue;
+                }
+                ui.label(format!(
+                    "{} {} \u{00B7} {} {} \u{00B7} {} {}",
+                    e.conversations,
+                    self.state.tr("conversations"),
+                    e.participants.len(),
+                    self.state.tr("participants"),
+                    e.events,
+                    self.state.tr("events"),
+                ));
+                for (k, v) in &e.facts {
+                    ui.weak(format!("{k}: {v}"));
+                }
+                egui::ScrollArea::both()
+                    .max_height(180.0)
+                    .id_salt(("preview-rows", i))
+                    .show(ui, |ui| {
+                        egui::Grid::new(("preview-grid", i))
+                            .striped(true)
+                            .num_columns(4)
+                            .spacing([12.0, 2.0])
+                            .show(ui, |ui| {
+                                for h in ["col_written", "col_utc", "col_from", "col_text"] {
+                                    ui.label(egui::RichText::new(self.state.tr(h)).color(CYAN));
+                                }
+                                ui.end_row();
+                                for r in &e.first {
+                                    ui.monospace(&r.source_time);
+                                    ui.monospace(&r.utc);
+                                    ui.label(&r.sender);
+                                    ui.label(&r.body);
+                                    ui.end_row();
+                                }
+                            });
+                    });
+            }
         });
     }
 
@@ -528,7 +908,7 @@ impl HashInvApp {
                 }
             }
             if let Some(n) = &self.notice {
-                ui.colored_label(egui::Color32::from_rgb(0xFF, 0xB0, 0x40), n);
+                ui.colored_label(AMBER, n);
             }
         });
         ui.add_space(6.0);
@@ -540,6 +920,16 @@ impl HashInvApp {
         );
         let live = self.started.map(|s| s.elapsed().as_millis() as u64);
         ui.label(self.state.timing_text(live));
+        if let Some((done, total)) = self.state.intake_progress {
+            ui.weak(format!(
+                "{}: {done}/{total} {}",
+                self.state.tr("intake_progress"),
+                self.state.tr("files")
+            ));
+        }
+        if let Some(t) = self.state.conversion_text() {
+            ui.weak(t);
+        }
         if !self.state.current_item.is_empty() {
             ui.weak(format!(
                 "{}: {}",
@@ -549,10 +939,7 @@ impl HashInvApp {
         }
         match &self.state.phase {
             Phase::Failed(e) => {
-                ui.colored_label(
-                    egui::Color32::from_rgb(0xFF, 0x6B, 0x6B),
-                    format!("{}: {}", self.state.tr("failed"), e),
-                );
+                ui.colored_label(RED, format!("{}: {}", self.state.tr("failed"), e));
             }
             Phase::Finished | Phase::Cancelled => {
                 if let Some(o) = self.state.outcome.clone() {
@@ -575,6 +962,36 @@ impl HashInvApp {
                         o.low,
                         o.info
                     ));
+                    let c = &o.conversion;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!(
+                            "{} {} \u{00B7} {} {} \u{00B7} {} {} \u{00B7} {} {}",
+                            c.exports,
+                            self.state.tr("exports"),
+                            c.conversations,
+                            self.state.tr("conversations"),
+                            c.events,
+                            self.state.tr("events"),
+                            c.files,
+                            self.state.tr("rsmf_files"),
+                        ));
+                        if c.files_invalid > 0 {
+                            ui.colored_label(
+                                RED,
+                                format!("({} {})", c.files_invalid, self.state.tr("invalid")),
+                            );
+                        }
+                        if c.exports_failed > 0 {
+                            ui.colored_label(
+                                RED,
+                                format!(
+                                    "({} {})",
+                                    c.exports_failed,
+                                    self.state.tr("exports_failed")
+                                ),
+                            );
+                        }
+                    });
                     let lines = self.state.evidence_lines();
                     if !lines.is_empty() {
                         egui::CollapsingHeader::new(format!(
@@ -600,6 +1017,26 @@ impl HashInvApp {
                         }
                         if ui.button(self.state.tr("open_logs")).clicked() {
                             open_path(&o.log_dir);
+                        }
+                        if let Some(dir) = &o.rsmf_dir
+                            && ui.button(self.state.tr("open_rsmf")).clicked()
+                        {
+                            open_path(dir);
+                        }
+                        if let Some(dir) = self.state.intake_report_dir.clone()
+                            && ui.button(self.state.tr("open_hash_report")).clicked()
+                        {
+                            let lang = if self.state.lang == "all" {
+                                "en"
+                            } else {
+                                self.state.lang.as_str()
+                            };
+                            let stats = Path::new(&dir).join(format!("statistics.{lang}.html"));
+                            open_path(&if stats.is_file() {
+                                stats
+                            } else {
+                                PathBuf::from(dir)
+                            });
                         }
                     });
                 }
