@@ -1,306 +1,353 @@
-<!--
-  Template note for the docs agent of a tool scaffolded from rv-rsmf: sections 1, 2.3, 3 (shared rows), 6, 7,
-  8 and the shared troubleshooting tables apply to every Rakvor tool. Rewrite the parts between forge:domain
-  markers: the walkthrough steps that show what THIS tool does in the case (intake here; analysis in a new tool),
-  the domain outputs, the findings table and the domain messages.
--->
+# Usage guide: from an export to verified RSMF files
 
-# Usage guide: from intake to a verified case
-
-This is the end-to-end guide for an examiner. It walks through one case, explains every output, says how to read
-each finding, and how to prove afterwards that nothing changed. Option lists are not repeated here:
-
-- every command, option, default, example and exit code: [usage-cli.md](usage-cli.md) (generated from `--help`);
-- the desktop app, window by window: [usage-gui.md](usage-gui.md);
-- the case folder contract: [case-folder.md](case-folder.md);
-- why each check works: [theory.md](theory.md); legal weight: [admissibility.md](admissibility.md);
-- installing and verifying the tool: [installation.md](installation.md).
+This page walks through a conversion end to end: checking an export with `preview`, making the decisions only the
+examiner can make (time zone, date order, custodian, CSV mapping), converting standalone or in a case folder,
+validating, reading the outputs and `trace.csv`, verifying a run, and troubleshooting. Every option of every
+command is in [usage-cli.md](usage-cli.md) (generated from `--help`); the desktop app is in
+[usage-gui.md](usage-gui.md); what the tool does to the data is in [theory.md](theory.md).
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor X as Examiner
-    participant H as rv-rsmf (intake)
-    participant C as Case folder
-    participant P as Analysis tool (e.g. rv-pdfauth)
-    participant T as TSA
-    X->>H: scan --case-dir CASE --case ID -i E:\export
-    H->>C: case.json, registry E0001…, case-log run_started / evidence_registered
-    H->>T: audit chain head
-    T-->>H: RFC 3161 token
-    H->>C: runs/rv-rsmf/RUN-ID, case-log run_finished
-    X->>P: analyze --case-dir CASE
-    P->>C: re-hash every item, compare with the registry
-    P->>C: runs/rv-pdfauth/RUN-ID, case-log run_started / run_finished
-    X->>H: verify-case CASE
-    H-->>X: OK, case-log entries, registered items, runs verified
-    X->>X: OpenSSL token check, report re-hash, sign and file
+flowchart LR
+    P["preview<br/>(writes nothing)"] --> D{"decisions needed?"}
+    D -->|"time zone, date order,<br/>CSV mapping"| P
+    D -->|no| C["convert<br/>standalone or --case-dir"]
+    C --> V["validate · verify-log ·<br/>verify-case"]
+    V --> R["read reports,<br/>trace.csv, findings"]
+    R --> L["load .rsmf into Relativity"]
 ```
+
+Command outputs below come from real runs of the synthetic samples in [examples/](../examples/README.md); paths
+are shortened.
 
 ## 1. Before you start
 
 | Check | Why | How |
 | --- | --- | --- |
-| Work on a **verified copy** (forensic image, write-blocked export), never the original media | The tool is read-only in software, not a write blocker | Imaging tool + write blocker; note model and serial |
-| The installed tool is the genuine release | Court question: "how do you know what you ran?" | [installation.md](installation.md) steps 2–4 and 6 |
-| Hash policy | MD5/SHA-1 alone are not collision-resistant | Always include `sha256` (or `sha512`): `--hash sha256,md5` when an older record uses MD5 |
-| Clock | Audit times come from the workstation clock | Check Windows time sync before the run |
-| Jurisdiction | Selects the custody form | `--jurisdiction co` (default) or `fr`; in a case folder it is fixed at creation |
-| Timestamp | Online TSA by default | `--no-timestamp` offline, then `rv-rsmf timestamp` later; `--tsa-url` for a qualified / ECD TSA |
-| Examiner certificate | Signs every PDF report | `--sign-cert examiner.p12` ([signing](#7-signing-reports-with-the-examiner-certificate)) |
-| One case, one folder | Every tool of the case links to the same registry and case log | Create the case folder on the case volume, e.g. `D:\cases\CASE-2026-014` |
+| Work on a **verified copy** of the export, never the only copy | The tool is read-only in software, not a write blocker, and reads the export more than once | Copy to the case volume, register it with rv-hashinv (or `--intake hashinv`) |
+| Keep the export **complete** | Media next to a WhatsApp `.txt`, the Telegram `photos/`, `files/`… folders, every Teams `.msg` | Give the export's folder with `-r`, not only the main file |
+| Know how the export was made | The RSMF reproduces the export, not the phone | Note who exported it, on which device, with which app version and options ("with/without media") |
+| The phone's **time zone** at the time of the messages | WhatsApp and most CSV times have no offset | Device settings, the custodian's statement, an extraction report; travel can change it |
+| The installed tool is the genuine release | "How do you know what you ran?" | [installation.md](installation.md) steps 2–4 and 6 |
+| Hash policy | MD5/SHA-1 alone are not collision-resistant | Always include `sha256` (or `sha512`) |
+| Clock | Audit times come from the workstation clock | Check Windows time sync |
+| Jurisdiction, timestamp, certificate | Custody form, proof of time, signed PDFs | `--jurisdiction co\|fr`, `--tsa-url` / `--no-timestamp`, `--sign-cert` |
 
-## 2. Case walkthrough
+## 2. Walkthrough
 
-The example case: `CASE-2026-014`, Colombian jurisdiction, examiner Ana Ruiz, a client export on `E:\export`
-(here: the three sample files). Command outputs below come from a real run of the sample against the local test
-TSA (`tests/fake_tsa.py`); paths are shortened.
+### 2.1 Preview: how will the export be read?
 
-<!-- forge:domain -->
-### 2.1 Intake: register the evidence
+`preview` reads the exports exactly as `convert` would, prints the source type, the facts the parser found (date
+order and why, time zone, variant), the findings and the first messages with the time **as written** next to the
+UTC value. It writes nothing and logs nothing.
 
 ```powershell
-rv-rsmf scan --case-dir D:\cases\CASE-2026-014 --case CASE-2026-014 --jurisdiction co `
-    -i E:\export -r --hash sha256,md5 --actor "Ana Ruiz" --sign-cert C:\certs\ana-ruiz.p12
+rv-rsmf preview -i "E:\export\whatsapp-android-en" --timezone Europe/Paris --limit 4
 ```
 
 ```text
-DONE  run 20261021T154339Z-6e298b
-  items: 3  bytes: 234  errors: 0  elapsed: 1.2 s
-  findings: high 0, medium 1, low 0, info 2
-  timestamp: ok 2026-10-21T15:43:40Z
-  report: D:\cases\CASE-2026-014\runs\rv-rsmf\20261021T154339Z-6e298b\reports\statistics.en.html
-  logs:   D:\cases\CASE-2026-014\runs\rv-rsmf\20261021T154339Z-6e298b\logs
-  case:   CASE-2026-014 (intake) registered 3 (new 3), verified 0, mismatched 0, not in registry 0
+E:\export\whatsapp-android-en\WhatsApp Chat with Ana Ruiz.txt [whatsapp]
+  chat_file: WhatsApp Chat with Ana Ruiz.txt
+  date_order: dmy
+  date_order_basis: line 11: first component 13 > 12
+  lines_read: 13
+  timezone: Europe/Paris
+  variant: android
+  conversations: 1  participants: 3  events: 10
+  finding: DATE_ORDER_INFERRED (info)
+  finding: MEDIA_OMITTED_IN_EXPORT (low)
+  finding: ATTACHMENT_REFERENCED_NOT_FOUND (medium)
+  finding: PARTICIPANT_IDENTIFIED_BY_NUMBER_ONLY (info)
+  as written             UTC                    from                 text
+  02/03/2026, 09:58      2026-03-02T08:58:00Z   -                    Messages and calls are end-to-end encrypted. No one outside
+  02/03/2026, 09:59      2026-03-02T08:59:00Z   -                    Ana Ruiz created group "Proyecto Faro"
+  02/03/2026, 09:59      2026-03-02T08:59:00Z   -                    Ana Ruiz added ‪+33 6 00 00 00 01‬
+  02/03/2026, 10:00      2026-03-02T09:00:00Z   Ana Ruiz             Hola! Plan for the 14th: 1. Kick-off at 10:00 2. Review: bud
 ```
 
-What happened, in order: the case folder did not exist, so `case.json` was written once (`--case` and
-`--jurisdiction` are needed only now) and `case_created` opened the case log; `run_started` was appended to the
-case log; every file was hashed once with SHA-256 and MD5 and typed by its first bytes; the three files were
-registered as `E0001` (`acta-copia.txt`), `E0002` (`acta.txt`) and `E0003` (`foto-vacaciones.jpg`) — sorted by
-path — in `evidence\registry.json` / `.csv`, and `evidence_registered` recorded the new registry SHA-256 in the
-case log; reports and the custody form of each item now carry its evidence id; the audit chain head was
-timestamped; `run_finished` in the case log recorded the run's final audit head.
+Compare a few lines with the export and with what the custodian says. `--json` prints one JSON object per export
+(for scripts); `--limit N` sets the number of messages (default 20). Exit codes: 0 every export can be converted
+with these options, 1 an export cannot be read, 2 a decision is needed.
 
-Re-running the same intake on unchanged files keeps the ids (`registered 3 (new 0)`). A changed file at a
-registered path gets a new id and `REGISTRY_PATH_CONTENT_CHANGED`. Use `-i` repeatedly, `-r` for subfolders, or
-`--input-list files.txt` (one path per line, `#` comments, relative paths from the list's folder).
+### 2.2 Choosing `--timezone`
 
-### 2.2 Analysis: later tools re-verify every item
-
-Every Rakvor analysis tool (any tool scaffolded from this template, where `CASE_ROLE` is `analysis`) takes the same
-`--case-dir`. Without `-i` it examines every registered item; `--evidence E0001,E0003` selects some.
-
-```powershell
-rv-pdfauth analyze --case-dir D:\cases\CASE-2026-014 --actor "Ana Ruiz" --sign-cert C:\certs\ana-ruiz.p12
+```text
+error: …\whatsapp-dst.txt: the export's times have no UTC offset; give the device's time zone with --timezone (IANA name, e.g. Europe/Paris)
 ```
 
-Before analysing each file, the tool re-hashes it (adding SHA-256 if your selection shares no algorithm with the
-registry, logged as `case_algorithm_added`) and compares it with the registry — by `--evidence` id, else by path,
-else by content. Its summary ends with a line such as
-`case: CASE-2026-014 (analysis) registered 0 (new 0), verified 3, mismatched 0, not in registry 0`. A file that no
-longer matches raises `EVIDENCE_HASH_MISMATCH_WITH_CASE` (high, exit code 3) and **is still analysed**, so the
-examiner can decide; a file never registered raises `EVIDENCE_NOT_IN_CASE_REGISTRY` (medium).
+Give the IANA name of the zone the **phone** used (`Europe/Paris`, `America/Bogota`, `Europe/Madrid`), not your
+own, and not a fixed offset such as `UTC+1` (a fixed offset ignores daylight-saving time). One run uses one zone
+for every export: convert exports from phones in different zones in separate runs. The zone is also the zone in
+which days are cut into files, for every source (Telegram and Teams times are UTC in the export; without
+`--timezone` their days are cut in UTC).
 
-> **rv-pdfauth at its current commit does not implement `--case-dir` yet** (its admissibility page lists this as
-> gap G24). Until it does, run it with `--out D:\cases\CASE-2026-014\runs\rv-pdfauth` and compare its `hashes.csv`
-> with `evidence\registry.csv` by SHA-256, as described in rv-pdfauth's own usage guide. Keep that output with the
-> case file.
-<!-- /forge:domain -->
+The choice is recorded in `conversion_started`, in each RSMF conversation (`source_timezone`) and as
+`TIMEZONE_APPLIED`; each event keeps the time as written (`source_time`). Times at a daylight-saving change are
+converted by a fixed rule and reported (`DST_AMBIGUOUS_OR_MISSING_TIME`, [theory.md B6](theory.md#b6-time-local-time-to-utc-and-the-date-order)):
+check those messages against the order of the conversation.
 
-### 2.3 Verify the whole case
+### 2.3 Choosing `--date-order`
+
+```text
+error: …\whatsapp-ambiguous.txt: the day/month order of the dates cannot be decided from the file (possible: dmy, mdy); give --date-order. Lines: line 1: 03/04/26, 9:05 AM - Carla Méndez: Buenos días | line 3: 05/04/26, 1:30 PM - Carla Méndez: Yes: 10 AM at the office
+```
+
+Asked for only when **every** date of a WhatsApp export could be day-first or month-first. Decide from the phone's
+language and region settings, from the content ("see you on 05/06?"), or from another record of the same
+conversation; then `--date-order dmy` or `mdy`. The decision is reported as `DATE_ORDER_CHOSEN`. When the file
+decides by itself (a number above 12), the file wins and your option is only recorded
+(`date_order_option_used = no`), so one run can convert several exports. For CSV files `--date-order` **always**
+applies when given (rows that do not fit become "invalid date" in `UNPARSED_LINES`): give it only for the CSV that
+needs it, or put `date_order` in that CSV's mapping instead.
+
+### 2.4 Choosing `--custodian`
+
+`--custodian "Ana Ruiz"` names the device owner. It:
+
+- becomes the RSMF conversation `custodian` and the `From` header when a participant has that display name or
+  number (otherwise only `X-RSMF-Custodian` is written and there is no `From` header);
+- renames WhatsApp authors written as `You` / `Tú` / `Vous` / `Du` / `Você` / `Tu` (custom `author_in_export` keeps
+  the original) and makes their messages `outgoing`;
+- fills an empty CSV sender on an `outgoing` row.
+
+Write it exactly as the export names the owner (or their number). It applies to every export of the run.
+
+### 2.5 Other options
+
+| Option | Use |
+| --- | --- |
+| `--source whatsapp\|telegram\|teams-msg\|csv` | Force the reader for files that are not recognised (e.g. a renamed WhatsApp `.txt`) |
+| `--platform-name "WhatsApp Business"` | Platform shown in Relativity (RSMF `platform`, `X-RSMF-Application`) |
+| `--csv-map FILE.toml` / `--csv-profile` | CSV column mapping ([reference](#csv-column-mapping-reference)) |
+| `--hash sha256,md5` | One or two algorithms; the first is the primary (and seeds the event collection id) |
+| `--lang en\|es\|fr\|all` | Report languages |
+| `-i`, `-r`, `--input-list` | Inputs; folders one level deep unless `-r` |
+
+### 2.6 Convert (standalone)
 
 ```powershell
-rv-rsmf verify-case D:\cases\CASE-2026-014
+rv-rsmf convert -i E:\export -r --timezone Europe/Paris --date-order dmy --hash sha256,md5 `
+    --case DEMO-001 --actor "Ana Ruiz" --lang all --out D:\work\rsmf-demo
 ```
 
 ```text
-OK  case CASE-2026-014: 4 case-log entries, 3 registered items, 1 runs verified: D:\cases\CASE-2026-014
+DONE  run 20261027T164952Z-750c58
+  items: 16  bytes: 99559  errors: 0  elapsed: 0.3 s
+  findings: high 0, medium 10, low 2, info 24
+  timestamp: off
+  report: D:\work\rsmf-demo\reports\20261027T164952Z-750c58\statistics.en.html
+  logs:   D:\work\rsmf-demo\logs\20261027T164952Z-750c58
+  rsmf:   8 export(s), 10 conversation(s), 49 event(s), 17 file(s) -> D:\work\rsmf-demo\rsmf\20261027T164952Z-750c58
 ```
 
-Every Rakvor tool has `verify-case` and they agree (a case written by the Rust build verifies with the Python
-build and the reverse). It checks the case-log chain, `case.json`, the registry digest, every run's audit chain and
-timestamp tokens, and the cross-links between the case log and each run ([theory.md B7](theory.md#b7-the-case-folder)).
-Exit 0 = intact (warnings, such as a run still in progress, are printed), 3 = broken, 1 = not a case folder.
-By default it does not re-hash the evidence; add `--rehash` to read every registered item that is still reachable
-at its registered path and compare its digests with the registry (a path registered several times is compared with
-its latest registration):
+(The whole sample folder, run with `--no-timestamp`; with a reachable TSA the line reads `timestamp: ok <time>`.
+Before anything is written, every export is checked for missing decisions — exit 2 if
+one is needed.) What happened: every file was hashed; the files were grouped into 8 exports (media and the CSV
+mapping became members); each export was read, sliced per conversation per day, written as `.rsmf`, validated and
+read back; `trace.csv` was written; reports, timestamp and statistics followed. Exit code 0 = no high-severity
+finding; 3 = at least one (look for `PARSER_FAILED`, `RSMF_SCHEMA_INVALID`, `RSMF_ROUNDTRIP_MISMATCH`,
+`EVIDENCE_HASH_MISMATCH_WITH_CASE`).
+
+`--progress jsonl` prints one JSON event per line on stdout for scripts (`run_started`, `item_started`,
+`item_hashed`, `progress`, `export_started`, `rsmf_written`, `export_finished`, `evidence_linked`, `intake_*`,
+`error`, `timestamp`, `report_written`, `run_finished`…). **Ctrl+C** stops after the current chunk, export or file:
+partial reports are written, `run_cancelled` is logged, exit code 130.
+
+### 2.7 Convert in a case folder
+
+```powershell
+# rv-hashinv registers the exports first, then rv-rsmf verifies and converts them (one command)
+rv-rsmf convert -i E:\export -r --case-dir D:\cases\CASE-2026-014 --case CASE-2026-014 --jurisdiction co `
+    --timezone Europe/Paris --intake hashinv --actor "Ana Ruiz"
+# or, when the registry already exists: every registered item, or some of them
+rv-rsmf convert --case-dir D:\cases\CASE-2026-014 --timezone Europe/Paris
+rv-rsmf convert --case-dir D:\cases\CASE-2026-014 --evidence E0003,E0004 --timezone Europe/Paris
+```
+
+Outputs go to `D:\cases\CASE-2026-014\runs\rv-rsmf\<RUN-ID>\{logs,reports,rsmf}`; the summary ends with
+`case: CASE-2026-014 (analysis) … verified N, mismatched 0, not in registry 0`. Each file is re-hashed and compared
+with the registry before conversion; a mismatch is a high finding and the conversion still runs. With
+`--evidence` or no `-i`, missing decisions are found during the run (`PARSER_FAILED`) rather than before it:
+preview first. Details: [case-folder.md](case-folder.md).
+
+### 2.8 Validate
+
+```powershell
+rv-rsmf validate D:\work\rsmf-demo\rsmf\20261027T164952Z-750c58
+```
 
 ```text
-rv-rsmf verify-case D:\cases\CASE-2026-014 --rehash
-OK  case CASE-2026-014: 4 case-log entries, 3 registered items, 1 runs verified: D:\cases\CASE-2026-014
-    re-hashed 3 of 3 registered items: 3 match the registry
+OK       …\001-generic-csv-000001\Grupo-obra-aae949\2026-10-24.rsmf  (1 events, 0 attachments)
+OK       …\006-WhatsApp-Chat-with-Ana-Ruiz-txt-000014\Ana-Ruiz-aa3173\2026-03-02.rsmf  (7 events, 1 attachments)
+…
 ```
 
-A file that differs is listed as `E0002 <path>: sha256 differs from the registry (registered …, now …)` and the
-exit code is 3; a file not reachable from this workstation is a warning, not a failure.
+It applies the official schema and the strict checks ([theory.md B11](theory.md#b11-validation-and-read-back)) to
+any `.rsmf` — ours or another vendor's — and prints each problem (`schema: …`, `strict: …`). Exit 0 all valid, 3 at
+least one invalid, 1 a file could not be read. The conversion already ran the same checks plus a read-back; run
+`validate` again on the copy you deliver, after any transfer.
 
-### 2.4 The same from the desktop app
+## CSV column mapping reference
 
-Start **RV RSMF**, fill **Case folder** in section 1 (and **Case ID** plus the custody form's jurisdiction for a
-new case), add the evidence (files, folders, drag and drop) — or none, to re-examine every registered item — tick
-one or two hash algorithms, set the report language and examiner in *3. Reports*, the timestamp and certificate in
-*4. Trust*, then **Start review**. The output folder is derived from the case folder and locked; the result panel
-lists every evidence id and its status. Every setting you change before starting is written to the run's audit log
-(`ui_*` actions). The engine, outputs and findings are the same as the CLI's. Details:
-[usage-gui.md](usage-gui.md).
+A mapping is a TOML file. rv-rsmf uses, in this order: `--csv-map FILE`; a file `<csv stem>.map.toml` next to the
+CSV (so one run can convert several CSVs with different mappings); the built-in profile (`--csv-profile`, default
+`generic`; with no mapping at all and a header without the generic columns, `xry-draft` then `cellebrite-draft`
+are tried). Unknown keys are rejected (`deny_unknown_fields`), so a typo stops the run with exit 2 instead of being
+ignored.
+
+```toml
+[columns]                       # a column name, or a list of alternative names; matched case-insensitively
+timestamp = "Time"              # REQUIRED
+timestamp_format = "auto"       # "auto" (default), "iso", "epoch_s", "epoch_ms", or a chrono strftime pattern
+timezone_column = "Zone"        # optional: per-row IANA name or UTC offset
+conversation = "Chat ID"        # REQUIRED: one RSMF conversation per distinct value
+sender = "From"                 # REQUIRED: "Name", "+57 300 000 0001", "a@b.c" or "Name <+57 300 000 0001>"
+sender_number = "From number"   # optional: overrides the number of the sender
+recipients = "To"               # optional: several separated by ';'
+body = "Body"                   # REQUIRED
+direction = "Direction"         # optional: values mapped by [direction]
+application = "Source"          # optional: kept as the conversation's custom field "application"
+deleted = "Deleted"             # optional: true when the value is in [deleted] values
+attachment = "Attachment(s)"    # optional: path(s) relative to the CSV folder, separated by ';' or a line break
+
+[direction]                     # optional; replaces the default lists when given
+incoming = ["Incoming", "Received"]
+outgoing = ["Outgoing", "Sent"]
+
+[deleted]                       # optional; replaces the default list when given
+values = ["yes", "true", "1", "deleted"]
+
+[options]
+delimiter = "auto"              # "auto" (default), or one ASCII character such as "," ";" "|", or "tab" / "\t"
+encoding = "auto"               # "auto" (default), "utf-8", "utf-16le", "utf-16be", "windows-1252", or another
+                                # WHATWG label; a BOM always wins; a declared encoding is applied strictly
+skip_rows = 0                   # lines before the header line
+date_order = "dmy"              # "dmy", "mdy" or "ymd": numeric dates in "auto" format (--date-order wins)
+```
+
+| Key | Default when absent | Notes |
+| --- | --- | --- |
+| `timestamp_format` | `auto` | `auto`: RFC 3339, else numeric date + time with optional seconds, fraction, `am/pm`, offset (`Z`, `+02:00`, `UTC+2`, `(UTC-05:00)`, `GMT`). `iso`: the same but year-first only. `epoch_s` (fraction allowed), `epoch_ms`. Otherwise a chrono `strftime` pattern, e.g. `%d/%m/%Y %H:%M:%S`; with `%z`/`%:z` the cell is an instant; a date-only pattern gives midnight |
+| `delimiter` | `auto` | the most frequent of `,` `;` tab `\|` in the header line; none → tab for `.tsv`, comma otherwise |
+| `encoding` | `auto` | UTF-16LE when ≥ 30 % of the odd bytes are NUL, else UTF-8, else windows-1252 |
+| `[direction]` | `incoming in received inbox rx entrante` / `outgoing out sent outbox tx saliente` | case-insensitive; an unknown value is kept as custom `direction_raw` |
+| `[deleted] values` | `1 true yes y x deleted si sí oui vrai` | case-insensitive |
+| optional columns | not used | with your own mapping (file or sibling), a named optional column missing from the header is an **error**; with a built-in profile it is only noted |
+
+Built-in profiles ([csvmap.rs](../src/core/src/sources/csvmap.rs)):
+
+| Profile | Columns | Status |
+| --- | --- | --- |
+| `generic` | `timestamp`, `timezone`, `conversation`, `sender`, `sender_number`, `recipients`, `body`, `direction`, `application`, `deleted`, `attachment` | rv-rsmf's own column names |
+| `xry-draft` | timestamp `Time\|Date\|Timestamp\|Date/Time`; conversation `Chat ID\|Chat\|Conversation\|Thread`; sender `From\|Sender`; recipients `To\|Recipients\|Recipient`; body `Body\|Text\|Message`; direction; application `Source\|Application\|App`; deleted `Deleted\|Deleted?`; attachment `Attachment(s)\|Attachments\|Attachment` | **DRAFT, unverified**: MSAB XRY/XAMN layouts are not publicly documented; reported as `CSV_MAPPING_DRAFT_PROFILE` |
+| `cellebrite-draft` | timestamp `Timestamp: Time\|Timestamp\|Time\|Date`; conversation `Chat ID\|Chat #\|Chat\|Identifier`; sender `From\|Sender\|Participant`; recipients `To\|Participants\|Recipients`; body `Body\|Message\|Text`; direction; application `Source\|Source App\|Application`; deleted `Deleted\|Deleted - Instant Message`; attachment `Attachment(s)\|Attachments\|Attachment #1` | **DRAFT, unverified**: same caveat |
+
+Before relying on a draft profile, or on your own mapping, check a few converted messages against the source tool's
+own view (sender, time, text, direction) and keep that check with the case. The sample
+[generic.map.toml](../examples/sample/evidence/csv/generic.map.toml) maps Spanish column names with a fixed
+`strftime` format. A mapping problem stops the run with exit 2 and names the missing columns and the header found:
+
+```text
+error: …\n.csv: CSV mapping incomplete: missing columns: timestamp ("timestamp"), conversation ("conversation"), sender ("sender"), body ("body"); header has: Fecha, Chat, De, Texto
+```
 
 ## 3. Reading the outputs
 
-```mermaid
-flowchart TB
-    CASE["&lt;CASE&gt;/"] --> CJ["case.json · case-log.jsonl"]
-    CASE --> EV["evidence/registry.json · registry.csv"]
-    CASE --> RUN["runs/rv-rsmf/&lt;RUN-ID&gt;/"]
-    RUN --> L["logs/<br/>audit.jsonl · audit.log · hashes.csv<br/>environment.json · timestamp-NNNNN.tsr/.json"]
-    RUN --> R["reports/<br/>statistics.json/.LANG.html/.LANG.pdf"]
-    R --> I["items/NNNNN-name/"]
-    I --> T["technical.* — examiner, opposing expert"]
-    I --> S["summary.* — client"]
-    I --> K["custody.* — custody record"]
+| Look at | To learn |
+| --- | --- |
+| `reports\<RUN-ID>\statistics.<LANG>.html` | the run: exports by source, conversations, events, RSMF files (and invalid ones), attachments packed and missing, findings by severity and code |
+| `reports\…\items\<NNNNN>-<export>\technical.<LANG>.html` | one export: every finding with what it shows / does not prove, the parser's facts (date order and why, time zone, variant, CSV columns), the RSMF files with their SHA-256 |
+| `reports\…\items\…\summary.<LANG>.html` | the same for the customer, in plain words |
+| `rsmf\<RUN-ID>\trace.csv` | where each event came from and where it went |
+| `rsmf\<RUN-ID>\conversions.json` | every file of every export with its validation result |
+| `logs\<RUN-ID>\audit.jsonl` | every action, option and digest |
+
+Every file is described in [reports.md](reports.md).
+
+**Checking a message with `trace.csv`.** In Relativity, note a message's file and its event id (custom fields
+`source_file`, `source_lines` or `source_id`, `source_time` are also shown with the message). In `trace.csv` (open
+it in a spreadsheet, it is UTF-8):
+
+```text
+export,source_file,line,line_end,native_id,source_time,utc,rsmf_file,event_id,conversation,kind,attachments
+WhatsApp Chat with Ana Ruiz.txt,WhatsApp Chat with Ana Ruiz.txt,4,6,,"02/03/2026, 10:00",2026-03-02T09:00:00Z,006-WhatsApp-Chat-with-Ana-Ruiz-txt-000014/Ana-Ruiz-aa3173/2026-03-02.rsmf,e-000004,c-554810aa3173,message,0
 ```
 
-Without `--case-dir`, `logs\<RUN-ID>\` and `reports\<RUN-ID>\` are created under `--out` (default `.\rakvor-out`).
-
-| Output | For | What to use it for |
-| --- | --- | --- |
-| `statistics.*` | Examiner, lawyer | Run overview: who, when, interface, algorithms, totals and throughput, findings by severity and code, items by detected type, duplicate groups (paths), the case-folder section (registered / added / verified / mismatched / not registered), timestamp status, signer, audit chain head and entry count at the time it was written |
-| `technical.*` | Examiner, opposing expert | One file: path, size, modification time, extension, detected type, status, evidence id and intake date (case folder), all digests, findings with *what it shows / what it does not prove*, method, audit entries `#first–#last`, limitations |
-| `summary.*` | Client | Plain-language status, the primary fingerprint, the findings in one sentence each, the next step |
-| `custody.*` | Custody record | Jurisdiction form (Spanish for `co`, French for `fr`) + English copy, pre-filled from the run, with 6 blank transfer rows to sign. An internal record, used **alongside** the official form ([admissibility.md](admissibility.md#consolidated-gap-list) G9) |
-| `audit.jsonl` / `audit.log` | Verification | Every action, hash-chained / the same, readable (not authoritative) |
-| `hashes.csv` | Verification | Hash register: `index,path,size,<algo1>[,<algo2>],status,error` |
-| `environment.json` | Reproducibility | Tool, compiler, every dependency version, OS, host, user, command line (or GUI settings) |
-| `timestamp-NNNNN.tsr` / `.json` | Verification | RFC 3161 response for audit entry NNNNN, and its summary |
-| `case.json`, `case-log.jsonl` | Verification | Case identity (written once); every tool run on the case, registry changes, final audit heads |
-| `evidence\registry.json` / `.csv` | Everyone | The evidence list of the case: id, path at intake, size, digests, which run registered it and when |
-
-**Status and next step per item:** `problem` (a high finding: do not rely on the file until explained),
-`attention` (medium or low: review with the examiner), `ok` (informational only). **Exit code 3** means
-"completed, at least one high-severity finding" — a normal outcome for evidence, not an error.
+Open the export at lines 4–6 and compare the author, the text and the time as written; `utc` is that time in the
+chosen zone converted to UTC. For Telegram and Teams use `native_id` (the message id; `0002.msg` for Teams is in
+`source_file`). For CSV files use `native_id` (the data row number): the line numbers of CSV files with Windows
+line ends are one too low in this version ([theory.md B5.4](theory.md#b54-csv--tsv-with-a-column-mapping)). Lines
+and rows that were **not** converted are not in `trace.csv`: the `UNPARSED_LINES` finding gives their count and
+the first three; review the rest of the export around them by hand.
 
 ## 4. Interpreting each finding
 
-Severity in brackets. "Check next" is what an examiner should do before relying on the finding; "do not
-conclude" is the overreach to avoid in a report. The exact wording printed in reports is in `i18n/en.json` (es, fr).
+What every finding shows and does not prove: [reports.md](reports.md#findings-catalogue). What to do:
 
-<!-- forge:domain -->
-| Code | Check next | Do not conclude |
-| --- | --- | --- |
-| `EXTENSION_MISMATCH` (medium) | The detected type; open the file with a tool for that type; ask how the file was named at the source | Intent to hide anything — exports, downloads and messaging apps rename files |
-| `EXECUTABLE_CONTENT` (high) | Confirm with a PE/ELF parser (a 2-byte `MZ` match can be a false positive); treat as hostile; analyse in a sandbox | That the program is malicious, or that anyone ran it |
-| `EMPTY_FILE` (info) | Whether the source holds the file with content; the size at acquisition | That it was emptied on purpose |
-| `DUPLICATE` (info) | The group in `statistics.*` (paths) and `hashes.csv`; check the primary algorithm is SHA-256 | Who copied the file, when, or which copy is the original |
-| `UNREADABLE` (high) | The OS error (permissions, locks, path length); re-acquire and re-run; unreadable items are **not** registered | That the file is damaged or was hidden |
-| `REGISTRY_PATH_CONTENT_CHANGED` (medium) | Both evidence ids in `registry.csv`; which run registered each; how the source changed between intakes | Which version is the original, or why it changed |
-<!-- /forge:domain -->
+| Finding | Check before relying on the RSMF |
+| --- | --- |
+| `PARSER_FAILED` (high) | Read the error; a damaged or unsupported export is not converted. Re-export if possible; never edit the export to make it pass (if you must, convert a documented copy and say so) |
+| `RSMF_SCHEMA_INVALID` / `RSMF_ROUNDTRIP_MISMATCH` (high) | Do not load that file. A `parent … is not an event in this file` error comes from a reply to a message of another day ([theory.md B7](theory.md#b7-slicing-conversation--day-and-the-10000-event-rule)); other errors: report them to engineering with the file |
+| `EVIDENCE_HASH_MISMATCH_WITH_CASE` (high) | Expected and actual digests in the finding; who had the file since intake (case log) |
+| `UNPARSED_LINES` (medium) | Open the export at the quoted lines/rows: headers, a mixed format, damaged lines? Is content missing from the conversation? |
+| `DST_AMBIGUOUS_OR_MISSING_TIME` (medium) | Is the order of those messages plausible? For a repeated hour, the earlier instant was used |
+| `NON_MONOTONIC_TIMESTAMPS` (medium) | Is the export in time order? Clock changes, wrong time zone or date order, or edits cause this |
+| `ATTACHMENT_REFERENCED_NOT_FOUND` (medium) | Was the whole export given (media folder, zip)? Ask for the missing files |
+| `CSV_MAPPING_DRAFT_PROFILE` (medium) | Compare messages with the source tool, or write and use your own mapping |
+| `POSSIBLE_EXPORT_LIMIT` (medium) | Compare the first and last messages with the phone or an extraction |
+| `DATE_ORDER_INFERRED` / `DATE_ORDER_CHOSEN` / `TIMEZONE_APPLIED` (info) | Your decision and its basis are stated; repeat them in your report |
+| `DELETED_MESSAGES_NOT_IN_EXPORT`, `MEDIA_OMITTED_IN_EXPORT`, `TELEGRAM_FILE_NOT_INCLUDED`, `EDIT_HISTORY_NOT_IN_EXPORT` | State the limitation in your report; corroborate with an extraction if it matters |
+| `PARTICIPANT_IDENTIFIED_BY_NUMBER_ONLY` | Establish who used the number from other evidence |
+| `PART_OF_EXPORT`, `NOT_A_CHAT_EXPORT` | Check that every chat export was recognised (`--source` to force); the export named by `PART_OF_EXPORT` can be wrong when two exports share a folder ([theory.md B3](theory.md#b3-recognising-and-grouping-exports)) |
 
-| Code (case folder, analysis tools) | Check next | Do not conclude |
-| --- | --- | --- |
-| `EVIDENCE_HASH_MISMATCH_WITH_CASE` (high) | Expected and actual digest in the finding; re-hash the file and the intake copy by hand; check storage, transfers and who had access since intake (case log) | Who changed it, when, or that it was deliberate |
-| `EVIDENCE_NOT_IN_CASE_REGISTRY` (medium) | Whether the file should have gone through intake; register it (intake run) if it is new evidence | That the file is altered or irrelevant |
+## Timestamps, signing and verifying a run
 
-## 5. Working without a case folder
-
-The same command works standalone for a quick inventory (no registry, no case log):
-
-```powershell
-rv-rsmf scan -i D:\evidence -r --hash sha256,md5 --lang all --case CASE-2026-014 --out D:\work\inventory
-rv-rsmf scan --input-list files.txt --progress jsonl > events.jsonl      # one JSON event per line on stdout
-```
-
-`--progress jsonl` prints every event (`run_started`, `item_started`, `item_hashed`, `progress` with elapsed time
-and ETA, `item_finished`, `evidence_linked`, `error`, `cancelled`, `timestamp`, `report_written`, `run_finished`)
-for scripts; a closed stdout never aborts the run. **Ctrl+C** stops after the current 1 MiB chunk: partial reports are written,
-`run_cancelled` is logged, exit code 130.
-
-## 6. Timestamps
-
-By default each run asks the TSA (`http://timestamp.digicert.com`, change with `--tsa-url`) to sign the audit
-chain head just before the statistics report is written. The token covers every evidence digest, finding and
-item-report digest recorded before it, not the statistics report and `run_finished` written after it
-([theory.md B8](theory.md#b8-rfc-3161-trusted-timestamp)).
-
-| Situation | What happens | What to do |
-| --- | --- | --- |
-| TSA reachable | `timestamp_obtained`; files `timestamp-NNNNN.tsr` and `.json` in the log folder; statistics report shows the time | Verify with OpenSSL (below) |
-| Offline | `timestamp_pending`; the run completes; warning on the statistics report and the console | Later, online: `rv-rsmf timestamp <log folder>` |
-| `--no-timestamp` / `RV_NO_TIMESTAMP=1` / GUI unticked | No request | Use `rv-rsmf timestamp` later if needed |
-| Broken chain | `rv-rsmf timestamp` refuses (exit 3): no timestamp is added to a broken log | Investigate; do not repair |
-
-`verify-log` checks the token's digest and that it covers the logged head, **not** the TSA's signature and
-certificate (gap G18). Do that with OpenSSL (Git for Windows ships `openssl.exe`):
+**Timestamps.** By default each run asks the TSA (`http://timestamp.digicert.com`, change with `--tsa-url`) to sign
+the audit chain head before the statistics report. Offline, the run logs `timestamp_pending`; later run
+`rv-rsmf timestamp <log folder>`. `verify-log` checks the token's imprint, **not** the TSA's signature (gap G18):
+do that with OpenSSL (Git for Windows ships `openssl.exe`):
 
 ```bash
 cd <log folder>
-N=00022                                                   # from the file name timestamp-00022.tsr
+N=00131                                                   # from the file name timestamp-00131.tsr
 H=$(python -c "import json;print(json.load(open('timestamp-$N.json'))['head'])")
 openssl ts -reply -in timestamp-$N.tsr -text              # genTime, policy OID, TSA name, serial, nonce, accuracy
 openssl ts -reply -in timestamp-$N.tsr -token_out -out token.der
-openssl pkcs7 -inform DER -in token.der -print_certs > tsa-certs.pem   # certificates sent by the TSA
+openssl pkcs7 -inform DER -in token.der -print_certs > tsa-certs.pem
 openssl ts -verify -digest "$H" -in timestamp-$N.tsr -CAfile <TSA root.pem> -untrusted tsa-certs.pem
 # → "Verification: OK"
 ```
 
-Get the TSA root certificate from the TSA's own repository, not from the token. Record the output in the case file:
-it is the evidence that the time is genuine.
-
-## 7. Signing reports with the examiner certificate
-
-`--sign-cert <file.p12|.pfx>` signs **every PDF report** (statistics, technical, summary, custody) with your own
-certificate (RSA keys only). The password is read from the environment variable named by `--sign-pass-env`
-(default `RV_SIGN_PASSWORD`) or asked for on the terminal (nothing is echoed while you type). It is never logged;
-the log records `signing_certificate_loaded` with the subject and the certificate's SHA-256, and every report prints
-both (`Signed by <subject> (certificate SHA-256 <fingerprint>)`). A wrong password stops the run (`run_failed`, exit 1) before any evidence is read. In the GUI: *4. Trust →
-Signing certificate* and *Certificate password* (kept in memory only).
+**Signing.** `--sign-cert <file.p12|.pfx>` signs every PDF report with your certificate (RSA only); the password
+comes from `RV_SIGN_PASSWORD` (or `--sign-pass-env NAME`) or a prompt without echo, and is never logged:
 
 ```powershell
 $s = Read-Host "Certificate password" -AsSecureString
 $env:RV_SIGN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
-rv-rsmf scan --case-dir D:\cases\CASE-2026-014 -i E:\export -r --sign-cert C:\certs\ana-ruiz.p12
+rv-rsmf convert -i E:\export -r --timezone Europe/Paris --sign-cert C:\certs\ana-ruiz.p12
 Remove-Item Env:RV_SIGN_PASSWORD
-(Get-PfxCertificate C:\certs\ana-ruiz.p12).GetCertHashString("SHA256")   # publish this fingerprint
 ```
 
-Check a signed report with Adobe Acrobat/Reader (Signature panel) or pyHanko:
-`pyhanko sign validate --pretty-print --trust <your CA or certificate .pem> technical.en.pdf` (expected: intact,
-coverage of the entire file). HTML and JSON reports are not signed; their digests are in the timestamped audit
-chain. The legal weight of this signature depends on the certificate ([admissibility.md](admissibility.md) G3).
+Check a signed report with Acrobat or `pyhanko sign validate --pretty-print --trust <CA .pem> technical.en.pdf`.
 
-## 8. Verifying a run
-
-Anyone — you, a colleague, an opposing expert — can check a run with its log folder, its report folder and the
-evidence copy:
-
-```powershell
-rv-rsmf verify-log D:\cases\CASE-2026-014\runs\rv-rsmf\20261021T154339Z-6e298b\logs
-# OK  25 entries, chain intact: …\audit.jsonl
-#     timestamp 2026-10-21T15:43:40Z by http://127.0.0.1:33481/tsr covers entry #22
-#     truncation: the final entry #25 is anchored by the case log (run_finished)
-```
-
-The last line says what vouches for the length of the log. A standalone run with a timestamp prints
-`truncation: entries up to #22 are anchored by the RFC 3161 timestamp (timestamp-00022.json); 3 entries after it
-(timestamp_obtained, statistics_report_written, run_finished) cannot be proven complete`; a standalone run without
-a timestamp prints `truncation not detectable without a timestamp or case record`. A log shorter than its
-timestamp or case record is `BROKEN` (`truncated: …`, exit 3).
+**Verifying a run.** Anyone can check a run with its three folders and the export copy:
 
 | Step | Command | Proves |
 | --- | --- | --- |
-| 1 | `rv-rsmf verify-log <log>` (exit 0 intact, 3 broken or truncated) | No entry edited, deleted or reordered; timestamp token matches the head it covers; the log still reaches the entry its timestamp covers and, in a case folder, the final entry recorded in the case log (the `truncation:` line names the anchor) |
-| 2 | `python tests/verify_chain.py <log>` (source tree) | Same, with an independent implementation; also re-hashes the evidence listed in `hashes.csv` |
-| 3 | OpenSSL ([Timestamps](#6-timestamps)) | The TSA really signed that head at that time |
-| 4 | Script below | Every report file, `environment.json` and `hashes.csv` still has the digest recorded in the log |
-| 5 | `rv-rsmf verify-case <CASE> --rehash` | The run is the one the case log announced, complete up to its recorded final entry; the reachable evidence still matches the registry |
-| 6 | `python tests/validate_reports.py <CASE or report folder>` | Every JSON report, `case.json` and `registry.json` match their schemas |
+| 1 | `rv-rsmf verify-log <log>` (0 intact, 3 broken or truncated) | No entry edited, deleted or reordered; the `truncation:` line names what anchors the end |
+| 2 | `python tests/verify_chain.py <log>` (source tree) | Same, independent implementation; also re-hashes the input files listed in `hashes.csv` |
+| 3 | OpenSSL (above) | The TSA really signed that head at that time |
+| 4 | Script below | Every `.rsmf`, `trace.*`, `conversions.json`, report, `environment.json` and `hashes.csv` still has the digest the log recorded |
+| 5 | `rv-rsmf validate <rsmf folder>` | Every RSMF file is still valid |
+| 6 | `rv-rsmf verify-case <CASE> --rehash` | Case folder: the run is the one the case log announced; the reachable evidence matches the registry |
+| 7 | `python tests/validate_reports.py <reports folder or CASE>` | Every JSON report matches its schema |
 
-Step 4 (no built-in command yet, gap G19) — re-hash every file the run recorded:
+Step 4 (no built-in command yet, gap G19):
 
 ```bash
-python - "<log folder>" "<report folder>" <<'EOF'
+python - "<log folder>" "<reports folder>" "<rsmf folder>" <<'EOF'
 import hashlib, json, pathlib, sys
-log, rep = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+log, rep, rsmf = (pathlib.Path(a) for a in sys.argv[1:4])
 def digest(p, algo):
     h = hashlib.new({"sha3-256": "sha3_256"}.get(algo, algo)); h.update(p.read_bytes()); return h.hexdigest()
 checked = bad = 0
@@ -312,6 +359,10 @@ for line in (log / "audit.jsonl").open(encoding="utf-8"):
         files = {rep / k: v for k, v in d["files"].items()}
     elif a in ("environment_recorded", "hash_register_written"):
         files = {log / e["item"]: d}
+    elif a == "trace_written":
+        files = {rsmf / e["item"]: d}
+    elif a == "rsmf_written":
+        files = {rsmf / e["item"]: {"sha256": d["sha256"]}}
     else:
         continue
     for p, digests in files.items():
@@ -324,44 +375,43 @@ print(f"{checked} files checked, {bad} mismatches"); sys.exit(3 if bad else 0)
 EOF
 ```
 
-On the sample run (3 items, one language) this checks 38 files; appending one byte to `statistics.json` gives
-`MISMATCH … statistics.json` and exit code 3. A single file in PowerShell: `(Get-FileHash <file> -Algorithm
-SHA256).Hash.ToLower()` and search the value in `audit.jsonl`.
+On the whole-sample run above (one language) it checks 201 files; appending one byte to one `.rsmf` gives
+`MISMATCH …/2026-03-13.rsmf sha256 …` and exit code 3.
 
-## 9. Troubleshooting
+## 5. Troubleshooting
 
-### Exit codes
+### By exit code
 
 | Command | 0 | 1 | 2 | 3 | 130 |
 | --- | --- | --- | --- | --- | --- |
-| `scan` | done, no high finding | runtime error (input not found, output not writable, wrong certificate password, case log locked) | usage error (unknown option or algorithm, three algorithms, unknown language; with `--case-dir`: another case's folder, `--case` missing at creation, unknown evidence id) | done, ≥ 1 high finding; or the case folder fails verification (nothing written) | cancelled (Ctrl+C), partial reports written |
-| `verify-log` | intact | log unreadable | — | broken chain, token mismatch, or truncated (shorter than its timestamp or case record) | — |
-| `verify-case` | case intact (warnings printed) | not a case folder (no `case.json`) | — | at least one check failed (with `--rehash`: an evidence file differs from the registry) | — |
-| `timestamp` | obtained and logged | TSA unreachable (nothing changed) | — | log missing, broken or unreadable (nothing added) | — |
+| `convert` (alias `scan`) | done, no high finding | runtime error: input not found, output not writable, wrong certificate password, case log locked, rv-hashinv not found or failed, an attachment that cannot be read while writing | usage error or examiner decision: unknown option, time zone or algorithm, three algorithms, unknown language; `--timezone` / `--date-order` / CSV mapping needed; with `--case-dir`: another case's folder, `--case` missing at creation, unknown evidence id | done with ≥ 1 high finding (`PARSER_FAILED`, `RSMF_SCHEMA_INVALID`, `RSMF_ROUNDTRIP_MISMATCH`, `EVIDENCE_HASH_MISMATCH_WITH_CASE`, `UNREADABLE`, `EXECUTABLE_CONTENT`); or the case folder fails verification (nothing written) | cancelled, partial reports written |
+| `preview` | every export can be converted | an export cannot be read; no export found | a decision is needed | — | — |
+| `validate` | every file valid | a file could not be read (not an RSMF message, no `rsmf.zip`) | — | at least one invalid file | — |
+| `verify-log` | intact | log unreadable | — | broken chain, token mismatch, truncated | — |
+| `verify-case` | case intact (warnings printed) | not a case folder | — | a check failed | — |
+| `timestamp` | obtained and logged | TSA unreachable | — | log missing or broken (nothing added) | — |
 | `self-test` | all pass | a failure: do not use the build | — | — | — |
 
 ### Messages
 
-<!-- forge:domain -->
 | Message | Fix |
 | --- | --- |
-| `at most 2 hash algorithms can run at the same time (got 3)` | Pick one or two algorithms |
-| `unknown hash algorithm '…': use md5, sha1, sha256, sha512, sha3-256 or blake3` | Spelling: `sha3-256` (also `sha3`, `sha3_256`) |
-| `… is neither a file nor a folder (symbolic links are not followed)` | Point at the link's target, or copy it |
-<!-- /forge:domain -->
-
-| Message | Fix |
-| --- | --- |
-| `… is not a case folder yet: give --case ID (and --jurisdiction) to create it` | First run in a new case folder: add `--case` |
-| `the case folder … belongs to case X, not Y` | Wrong folder or wrong `--case`; leave `--case` out after creation |
-| `evidence id(s) not in the case registry: E0042` | Check `evidence\registry.csv`; ids are `E` + number (`e7` = `E0007`) |
-| `--evidence needs an existing case folder with a registry` | Run the intake first |
-| `refusing to extend a broken case (…)` / `the case folder … fails verification` | Run `verify-case`; investigate what changed; **do not repair** a case log by hand — open a new case folder and document why |
-| `the case log is locked by <tool> run <id> (since …)` | Another tool is writing; wait and run again |
-| `stale case lock … held by … for more than 10 minutes` | Make sure no Rakvor tool is working on the case, then delete `case-log.lock` by hand (never automatic) and note it in the case file |
-| `cannot load signing certificate …: wrong password or unsupported file` | Check `RV_SIGN_PASSWORD`; the file must be a `.p12`/`.pfx` with a private key |
-| `only RSA signing certificates are supported` | Use an RSA certificate (ECDSA is not supported for report signing) |
-| `warning: timestamp pending (…)` | See [Timestamps](#6-timestamps) |
-| `refusing to append to a broken audit log` (`timestamp`) | The log was edited; investigate with `verify-log`; do not repair |
-| `no audit log at …: nothing to timestamp` (`timestamp`) | Point at the run's `logs\<RUN-ID>` folder (or its `audit.jsonl`) |
-| `truncated: …` (`verify-log`) | Entries were removed from the end of the log after the timestamp or the case record was made; investigate, do not repair |
+| `the export's times have no UTC offset; give the device's time zone with --timezone …` | [2.2](#22-choosing---timezone) |
+| `the day/month order of the dates cannot be decided from the file (possible: dmy, mdy); give --date-order. Lines: …` | [2.3](#23-choosing---date-order) |
+| `CSV mapping incomplete: missing columns: …; header has: …` | Write a mapping with those columns ([reference](#csv-column-mapping-reference)) or fix `skip_rows` |
+| `CSV mapping incomplete: the file is not valid windows-1252; set [options] encoding …` | Declare the right encoding in the mapping |
+| `CSV mapping incomplete: mapping … is not valid: unknown field …` | A typo in the TOML key (the list of keys is above) |
+| `unknown time zone '…': use an IANA name such as Europe/Paris or America/Bogota` | Use the `Region/City` name |
+| `no chat export found among N file(s); use --source to force the type` (`preview`) | The files were not recognised; check the names (`result.json`, `.txt` with WhatsApp lines) or force `--source` |
+| `mixed date formats: …` / `inconsistent dates: …` / `… not a valid date as dmy` (`PARSER_FAILED`) | The WhatsApp file mixes formats or was edited; inspect the two quoted lines |
+| `no WhatsApp message lines found` | Not a WhatsApp export, or an unsupported locale format: send a redacted sample to engineering |
+| `no Teams message (IPM.SkypeTeams.*) among the .msg files` | The `.msg` files are e-mails or other items, not Teams messages |
+| `parent e-… is not an event in this file` (`RSMF_SCHEMA_INVALID`) | A reply to a message of another day; known defect ([theory.md B7](theory.md#b7-slicing-conversation--day-and-the-10000-event-rule)) |
+| `--intake hashinv needs the evidence to register (--input or --input-list)` / `… cannot be combined with --evidence` | [case-folder.md](case-folder.md#one-step-intake-with-rv-hashinv) |
+| `rv-hashinv not found (install RV HashInv ≥ 0.3.0, or give its path with --hashinv-exe or RV_HASHINV). Looked in: …` | Install RV HashInv or pass `--hashinv-exe` |
+| `rv-hashinv intake failed (exit code N); nothing was analysed. …` | Read rv-hashinv's own messages (last lines quoted) and its run folder |
+| `the case folder … belongs to case X, not Y` / `evidence id(s) not in the case registry: …` | Wrong folder or id; see [case-folder.md](case-folder.md) |
+| `the case log is locked by …` / `stale case lock …` | Another tool is writing; for a stale lock make sure no tool runs, delete `case-log.lock` by hand and note it |
+| `cannot load signing certificate …` / `only RSA signing certificates are supported` | Check `RV_SIGN_PASSWORD` and the certificate type |
+| `warning: timestamp pending (…)` | Run `rv-rsmf timestamp <log folder>` when online |
+| `refusing to append to a broken audit log` / `truncated: …` | The log was edited; investigate with `verify-log`; do not repair |
