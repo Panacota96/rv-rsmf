@@ -1,0 +1,10 @@
+{
+  "source": "csv",
+  "path": "evidence/csv/generic.csv",
+  "options": { "timezone": "Europe/Madrid", "csv_profile": "generic", "csv_map": null },
+  "conversations": 1,
+  "events": 3,
+  "attachments_packed": 1,
+  "attachments_missing": 0,
+  "findings": ["DST_AMBIGUOUS_OR_MISSING_TIME"]
+}

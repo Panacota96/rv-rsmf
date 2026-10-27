@@ -1,0 +1,4 @@
+fecha,chat,remitente,numero,destinatarios,texto,sentido,app,adjunto
+2026-10-24 22:10:00,Grupo obra,Marta Ríos,+34 600 000 001,Pablo Sanz;Lucía Vega,¿Mañana a las 9 en la obra?,saliente,Signal,
+2026-10-25 02:30:00,Grupo obra,Pablo Sanz,+34 600 000 002,Marta Ríos;Lucía Vega,Vale. Llevo las llaves.,entrante,Signal,
+2026-10-25 09:05:00,Grupo obra,Lucía Vega,+34 600 000 003,Marta Ríos;Pablo Sanz,Adjunto el plano revisado.,entrante,Signal,media/plano-0001.png

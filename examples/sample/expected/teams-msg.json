@@ -1,0 +1,10 @@
+{
+  "source": "teams-msg",
+  "path": "evidence/teams-msg/0001.msg",
+  "options": { "timezone": null, "csv_profile": "generic", "csv_map": null },
+  "conversations": 1,
+  "events": 3,
+  "attachments_packed": 1,
+  "attachments_missing": 0,
+  "findings": ["UNPARSED_LINES"]
+}
