@@ -4,8 +4,9 @@
 //! render the [`events::Event`] stream it emits.
 //!
 //! ```text
-//! input ──► hash (1–2 algorithms, one read) ──► analyzer ──► duplicates ──► reports
-//!   └──────────────── every step appended to the hash-chained audit log ───────────┘
+//! input ──► hash (1–2 algorithms) ──► case registry check ──► exports ──► parse ──► RSMF per conversation/day
+//!                                                                     ──► validate + read back ──► trace ──► reports
+//!   └──────────────────────── every step appended to the hash-chained audit log ────────────────────────┘
 //! ```
 
 pub mod analyzer;
@@ -37,7 +38,6 @@ pub const TOOL_NAME: &str = "rv-rsmf";
 /// release never changes Cargo.lock (CI builds with --locked).
 pub const TOOL_VERSION: &str = env!("RV_VERSION");
 
-/// This tool's place in a shared case folder (see docs/case-folder.md). The reference rv-rsmf is the
-/// INTAKE tool (it registers evidence); tools scaffolded from it are ANALYSIS tools (they verify every item
-/// against the registry). The scaffold flips this one constant together with `case_role` in .forge.json.
+/// This tool's place in a shared case folder (see docs/case-folder.md): rv-rsmf is an ANALYSIS tool — it verifies
+/// every item against the registry written by the intake tool, rv-hashinv. Keep equal to `case_role` in .forge.json.
 pub const CASE_ROLE: CaseRole = CaseRole::Analysis;

@@ -250,13 +250,27 @@ fn csv_without_timezone_or_mapping_stops() {
         sources::parse(generic, &ParseOptions::default()),
         Err(ParseError::NeedsTimezone)
     );
-    // The xry-like header has none of the generic profile's column names.
+    // The xry-like header has none of the generic profile's column names: the built-in tool profile whose
+    // columns match is detected, and still reported as a draft.
     let generic_profile = ParseOptions {
         timezone: Some(chrono_tz::America::Bogota),
         ..Default::default()
     };
+    let p = sources::parse(xry, &generic_profile).unwrap();
+    assert_eq!(p.facts["profile_detected"], "yes");
     assert!(
-        matches!(sources::parse(xry, &generic_profile), Err(ParseError::NeedsMapping(m)) if m.contains("header has: Index, Time"))
+        p.findings
+            .iter()
+            .any(|f| f.code == "CSV_MAPPING_DRAFT_PROFILE")
+    );
+    // A forced mapping that does not fit is never replaced by a guess.
+    let map = ParseOptions {
+        timezone: Some(chrono_tz::America::Bogota),
+        csv_map: Some(generic.primary.with_file_name("generic.map.toml")),
+        ..Default::default()
+    };
+    assert!(
+        matches!(sources::parse(xry, &map), Err(ParseError::NeedsMapping(m)) if m.contains("header has: Index, Time"))
     );
     // The sibling generic.map.toml is used and recorded.
     let p = sources::parse(

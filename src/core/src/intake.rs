@@ -2,7 +2,7 @@
 //!
 //! Intake by RV HashInv (`--intake hashinv`): before analysing, rv-rsmf runs the Rakvor intake tool
 //! (`rv-hashinv scan … --case-dir`) on the same evidence, so one action gives the hash inventory, the
-//! evidence registry and the PDF analysis in one case folder.
+//! evidence registry and the RSMF conversion in one case folder.
 //!
 //! rv-rsmf does not hash or register evidence on rv-hashinv's behalf: the hash report and the registry
 //! are produced by rv-hashinv itself (its own executable, tests and audit log). rv-rsmf only

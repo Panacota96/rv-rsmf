@@ -315,7 +315,7 @@ fn sample_script_compares_the_hash_register() {
     let text = String::from_utf8_lossy(&o.stdout);
     assert!(o.status.success(), "{}", text);
     assert!(
-        text.contains("hashes.csv matches expected_hashes.csv (3 files"),
+        text.contains("hashes.csv matches expected_hashes.csv (16 files"),
         "{}",
         text
     );

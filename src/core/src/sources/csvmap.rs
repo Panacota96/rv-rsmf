@@ -815,6 +815,9 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
         .map_err(|e| ParseError::Invalid(format!("{}: {e}", export.primary.display())))?;
     let (text, enc_desc) = decode(&bytes, map.options.encoding.as_deref().unwrap_or("auto"))
         .map_err(ParseError::NeedsMapping)?;
+    // Windows line ends are read as \n so record line numbers (trace.csv) match an editor's line numbers;
+    // a CR+LF inside a quoted message body becomes LF.
+    let text = text.replace("\r\n", "\n");
     let text = text.strip_prefix('\u{FEFF}').unwrap_or(&text);
     let skip = map.options.skip_rows.unwrap_or(0);
     let mut body = text;
@@ -896,6 +899,7 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
         }
     }
 
+    let rejected_before_times = unparsed.len();
     // Pass 2: first look at every time cell.
     let fmt = TsFormat::parse(map.columns.timestamp_format.as_deref());
     let mut cells: Vec<Option<Cell>> = Vec::with_capacity(rows.len());
@@ -1338,7 +1342,10 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
             zones_used.into_iter().collect::<Vec<_>>().join(", "),
         );
     }
-    f.insert("csv.rows".into(), (rows.len() + unparsed.len()).to_string());
+    f.insert(
+        "csv.rows".into(),
+        (rows.len() + rejected_before_times).to_string(),
+    );
     f.insert("csv.rows_blank".into(), blank.to_string());
     f.insert("csv.rows_unparsed".into(), unparsed.len().to_string());
     Ok(out)

@@ -45,7 +45,7 @@ Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"
 Source: "{#SourceDir}\NOTICE"; DestDir: "{app}"
 Source: "{#SourceDir}\CHANGELOG.md"; DestDir: "{app}"
 Source: "{#SourceDir}\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs
-Source: "{#SourceDir}\examples\sample\evidence\*"; DestDir: "{app}\examples\sample\evidence"
+Source: "{#SourceDir}\examples\sample\evidence\*"; DestDir: "{app}\examples\sample\evidence"; Flags: recursesubdirs
 
 [Icons]
 Name: "{group}\RV RSMF"; Filename: "{app}\rv-rsmf-gui.exe"

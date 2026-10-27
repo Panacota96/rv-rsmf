@@ -109,7 +109,8 @@
     "conv_failed": "Cet export n'a pas pu être converti :",
     "exports": "Exports de discussion",
     "rsmf_files": "Fichiers RSMF",
-    "failed": "en échec"
+    "failed": "en échec",
+    "passed": "réussie"
   },
   "severity": {
     "high": "Élevée",
@@ -161,7 +162,7 @@
     "DATE_ORDER_INFERRED": {
       "title": "Ordre des dates déduit de l'export",
       "shows": "Les dates numériques ont été lues comme %{order} : la ligne %{line} (« %{example} ») n'admet que cette lecture.",
-      "does_not_prove": "Cela ne montre pas que toutes les lignes ont été écrites avec les mêmes réglages du téléphone ; les exports mélangés apparaissent comme lignes non interprétées."
+      "does_not_prove": "Cela ne montre pas que toutes les lignes ont été écrites avec les mêmes réglages du téléphone ; un export qui mélange dates jour-d'abord et mois-d'abord s'arrête sur une erreur au lieu d'être converti."
     },
     "DATE_ORDER_CHOSEN": {
       "title": "Ordre des dates choisi par l'expert",

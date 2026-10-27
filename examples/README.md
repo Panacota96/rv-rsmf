@@ -35,8 +35,7 @@ them (in CI), then converts it a second time and requires byte-identical `.rsmf`
 
 Known effects visible in the samples: `csv/media/plano-0001.png` and `csv/generic.map.toml` are reported as
 `PART_OF_EXPORT` of `xry-like.csv` although they belong to `generic.csv` (two exports in one folder; the conversion
-itself is right), and the trace line numbers of `xry-like.csv` (CRLF) are one lower than the file's lines
-([theory.md B3, B5.4](../docs/theory.md#b54-csv--tsv-with-a-column-mapping)).
+itself is right; [theory.md B3](../docs/theory.md#b3-recognising-and-grouping-exports)).
 
 `expected_hashes.csv` holds the digests of all 16 evidence files in all six algorithms, computed independently with
 Python's `hashlib` and `blake3`.

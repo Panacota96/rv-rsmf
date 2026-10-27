@@ -316,8 +316,9 @@ Ordering facts an opposing expert may test:
   digest, every `.rsmf` digest, `trace.csv` and every item-report digest, but not the statistics report or
   `run_finished` ([B16](#b16-rfc-3161-trusted-timestamp)).
 - A wrong certificate password stops the run (`run_failed`) before any evidence byte is read.
-- An attachment that cannot be read while writing an RSMF file (e.g. a corrupt zip member) stops the **whole run**
-  with exit code 1 (`convert_items` returns the error) instead of failing one export.
+- An attachment that cannot be read while writing an RSMF file (e.g. a corrupt zip member) is treated as missing for
+  that event: the body gets `[attachment not in export: NAME — unreadable: …]`, the file's `missing_attachments`
+  count includes it, and the run continues.
 
 ## B3 Recognising and grouping exports
 
@@ -487,7 +488,7 @@ flowchart LR
 | Conversations | One per distinct `conversation` value (empty → the CSV file stem); `channel` when more than 2 participants; the `application` values become custom `application`. |
 | Direction / deleted | Values in `[direction]` (default `incoming in received inbox rx entrante` / `outgoing out sent outbox tx saliente`), case-insensitive; anything else kept as custom `direction_raw`. `deleted` true when the cell is in `[deleted] values` (default `1 true yes y x deleted si sí oui vrai`). |
 | Attachments | Paths relative to the CSV folder, several separated by `;` or a line break; absolute paths, drive letters and `..` refused; missing → `ATTACHMENT_REFERENCED_NOT_FOUND`. |
-| Trace | `source.native_id` = data row number (1 = first row after the header); `line`–`line_end` = physical lines of the record. **Known defect:** for files with CRLF line ends the reported line is one less than the real line (measured: a CRLF file reports its first data row at line 1, the LF file at line 2) — use the row number (`native_id`) to locate CSV rows. |
+| Trace | `source.native_id` = data row number (1 = first row after the header); `line`–`line_end` = physical lines of the record. Windows line ends (CR LF) are read as LF before parsing, so line numbers match an editor's for both kinds of file (a CR LF inside a quoted message body becomes LF). |
 
 ## B6 Time: local time to UTC, and the date order
 
@@ -509,7 +510,8 @@ for every source; without it, days are cut in UTC.
 tz.from_local_datetime(local)
   Single(t)          → t in UTC                                   (normal case)
   Ambiguous(a, b)    → a (the EARLIER instant), flag "ambiguous"  (autumn: the repeated hour)
-  None               → local + 1 hour, earliest, flag "nonexistent"  (spring: the skipped hour)
+  None               → read with the UTC offset in force just before the change, flag "nonexistent"
+                       (spring: the skipped hour; same as moving forward by the length of the gap)
 every flagged event gets custom local_time_issue = ambiguous|nonexistent
 the export gets DST_AMBIGUOUS_OR_MISSING_TIME {count, timezone, examples (original text)}
 ```
@@ -518,13 +520,13 @@ Real values from `examples/sample/evidence/whatsapp-dst.txt` with `--timezone Eu
 
 | As written | Rule | UTC written |
 | --- | --- | --- |
-| `29.03.26, 02:30` (does not exist) | +1 h → 03:30 CEST | `2026-03-29T01:30:00Z` |
+| `29.03.26, 02:30` (does not exist) | offset before the change (CET, +01:00) = 03:30 CEST | `2026-03-29T01:30:00Z` |
 | `25.10.26, 02:30` (happens twice) | earlier = 02:30 CEST | `2026-10-25T00:30:00Z` |
 | `25.10.26, 04:00` | normal | `2026-10-25T03:00:00Z` |
 
-The "+1 hour" rule assumes a one-hour gap; the code comment says "shifted forward by the gap". For a zone with a
-30-minute daylight-saving shift (e.g. `Australia/Lord_Howe`) the result is 30 minutes later than the end of the
-gap. The time-zone rules are those compiled into `chrono-tz` 0.10.4; the IANA release they come from is not
+This works for any gap length: on Lord Howe Island (30-minute shift) `02:10` on the change day is written as
+`15:40Z` the day before, the same instant as `02:40` after the change (unit test
+`skipped_times_use_the_offset_before_the_change`). The time-zone rules are those compiled into `chrono-tz` 0.10.4; the IANA release they come from is not
 recorded in the run (only the crate version in `environment.json`).
 
 **Day/month order — WhatsApp** ([whatsapp.rs](../src/core/src/sources/whatsapp.rs) `decide_order`), over **all**
@@ -571,11 +573,10 @@ per file) and the 24-hour / 12-hour / 8-hour practice come from Relativity's sho
 ([B21](#b21-references)). Every file of a conversation in one export carries the same event collection id
 ([B8](#b8-the-rsmf-20-file-we-write)).
 
-**Replies across files.** A `parent` is written as given by the parser. When a reply and the message it answers
-fall on different days (or parts), the parent is not in the reply's file, the strict check fails
-(`parent … is not an event in this file`), the file gets `RSMF_SCHEMA_INVALID` (high) and the run exits 3.
-Measured with a two-message Telegram export (reply the next day). This affects Telegram and Teams exports, which
-have reply links; WhatsApp and CSV exports carry none.
+**Replies across files.** RSMF only allows a `parent` that is an event of the same file. When a reply and the
+message it answers fall on different days (or parts), the reply is written without `parent` and with a custom field
+`reply_to` = the id of the message it answers (unit test `a_reply_to_another_day_stays_valid`); within one file the
+`parent` link is kept, so Relativity threads it.
 
 ## B8 The RSMF 2.0 file we write
 
@@ -745,7 +746,7 @@ flowchart LR
 | Unknown keys | only the keys the schema defines are accepted at root, participant, conversation and event level (the schema itself allows any extra key, so a typo would validate) |
 | References | conversation participants, conversation `custodian`, event `participant`, event `conversation`, reaction participants must exist; event ids unique; every `parent` must be an event **of the same file** |
 | Times | every event `timestamp` ends in `Z` and parses as RFC 3339 |
-| Files | every attachment `id` and participant `avatar` is an entry of `rsmf.zip` (conversation `icon` is **not** checked, although the `validate` help text says it is) |
+| Files | every attachment `id`, participant `avatar` and conversation `icon` is an entry of `rsmf.zip` |
 | Limits | reaction values ≤ 30 characters; ≤ 10,000 events per file |
 | Headers | `X-RSMF-Version` present and equal to the manifest's `version`; `X-RSMF-EventCount` and `X-RSMF-AttachmentCount`, when present, equal the manifest |
 | Round trip | events read = events written; each packed attachment present with the same SHA-256 |

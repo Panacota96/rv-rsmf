@@ -420,7 +420,7 @@ fn conversion_view(c: &Catalog, it: &ItemResult) -> Value {
         "participants": cv.participants, "events": cv.events,
         "files": cv.files.iter().map(|f| json!({"file": f.file, "conversation": f.conversation, "day": f.day.clone().unwrap_or_else(|| c.label("undated")),
             "part": f.part, "events": f.events, "attachments": f.attachments, "missing": f.missing_attachments,
-            "valid": f.valid, "valid_label": c.label(if f.valid { "valid" } else { "invalid" }), "sha256": f.sha256})).collect::<Vec<_>>(),
+            "valid": f.valid, "valid_label": c.label(if f.valid { "passed" } else { "invalid" }), "sha256": f.sha256})).collect::<Vec<_>>(),
         "files_shown": cv.files.len().min(200), "files_total": cv.files.len(),
         "facts": cv.facts.iter().map(|(k, v)| json!({"name": k, "value": v})).collect::<Vec<_>>(),
     })

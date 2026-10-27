@@ -4,7 +4,11 @@
 
 ```mermaid
 flowchart LR
-  A[rv-rsmf] --> B[scan]
+  A[rv-rsmf] --> B[convert]
+  A --> P[preview]
+  A --> W[validate]
+  B --> R[(rsmf/RUN-ID)]
+  W --> R
   A --> C[verify-log]
   A --> D[self-test]
   A --> T[timestamp]

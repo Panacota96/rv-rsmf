@@ -26,7 +26,7 @@ flowchart LR
 | Windows job | `release.yml` job `windows` | builds, signs, tests, packages, hashes and uploads (§4) |
 | Installer script | `packaging/windows/installer.iss` | Inno Setup: per-user install (no admin), Windows 10+, Start-menu shortcuts, optional "add CLI to PATH" |
 | Signing certificate | GitHub secrets `SIGN_PFX_BASE64`, `SIGN_PFX_PASSWORD` | Rakvor's internal code-signing certificate (PFX); signing is skipped when the secret is missing |
-| Root certificate | `rakvor-code-signing-root.cer` (shared by every Rakvor tool; not in this repository) | "Rakvor Internal Code Signing Root CA"; installed on Rakvor machines so Windows trusts the signature |
+| Root certificate | `packaging/signing/rakvor-code-signing-root.cer` (the same file in every Rakvor tool's repository) | "Rakvor Internal Code Signing Root CA"; installed on Rakvor machines so Windows trusts the signature |
 
 ## 2. One-time setup (per repository)
 
@@ -89,10 +89,9 @@ files on that release (`gh release upload --clobber`). The tag and changelog sta
 
 Signing happens **before** zipping and hashing, so the hashes in `SHA256SUMS` are those of the signed files.
 
-Differences from the rv-pdfauth release job that a reviewer should know: this job does **not** run
-`signtool verify /pa` against the Rakvor root after signing (verify by hand, [installation.md §4](installation.md#4-verify-the-authenticode-signature-signed-releases));
-the signing steps' comments still mention an OV/EV certificate or Azure Artifact Signing, while Rakvor's decision is
-the internal certificate described below; and there is no PDFium or other third-party binary to fetch.
+After each signing step the job imports `packaging/signing/rakvor-code-signing-root.cer` on the runner and runs
+`signtool verify /pa /tw` on every signed file, so a release whose signatures do not chain to the Rakvor root fails.
+There is no third-party binary to fetch (unlike rv-pdfauth's PDFium).
 
 ## 5. The signing certificate
 

@@ -109,7 +109,8 @@
     "conv_failed": "This export could not be converted:",
     "exports": "Chat exports",
     "rsmf_files": "RSMF files",
-    "failed": "failed"
+    "failed": "failed",
+    "passed": "passed"
   },
   "severity": {
     "high": "High",
@@ -161,7 +162,7 @@
     "DATE_ORDER_INFERRED": {
       "title": "Date order inferred from the export",
       "shows": "Numeric dates were read as %{order}: line %{line} (\"%{example}\") can only be read that way.",
-      "does_not_prove": "It does not show that every line was written with the same phone settings; mixed exports are reported as unparsed lines."
+      "does_not_prove": "It does not show that every line was written with the same phone settings; an export that mixes day-first and month-first dates stops with an error instead of being converted."
     },
     "DATE_ORDER_CHOSEN": {
       "title": "Date order chosen by the examiner",

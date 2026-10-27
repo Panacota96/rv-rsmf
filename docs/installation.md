@@ -154,10 +154,8 @@ two tasks: **Add the rv-rsmf command to PATH** (user PATH, checked on first inst
 .\rv-rsmf-0.1.0-windows-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="addtopath"
 ```
 
-The installer copies the executables, README, LICENSE, NOTICE, CHANGELOG, `docs\` and the **top level** of the
-sample evidence (`examples\sample\evidence\*`: the three WhatsApp files only — the `[Files]` line of
-`installer.iss` has no `recursesubdirs`, so the `csv\`, `teams-msg\`, `telegram\` and `whatsapp-android-en\`
-samples are missing), not the sample scripts, `expected\` or `expected_hashes.csv`. Use the portable zip for the
+The installer copies the executables, README, LICENSE, NOTICE, CHANGELOG, `docs\` and the sample evidence
+(`examples\sample\evidence\` with its subfolders), not the sample scripts, `expected\` or `expected_hashes.csv`. Use the portable zip for the
 sample check of step 6.
 
 ### 5c. Native libraries
@@ -233,7 +231,7 @@ is not enforced by the OS; on a connected workstation, a Windows Firewall outbou
 
 | Item | Version |
 | --- | --- |
-| Rust | Pinned by [rust-toolchain.toml](../rust-toolchain.toml): **1.97.0** with rustfmt and clippy; `rustup` installs and selects it automatically inside the source tree (CI and the release job do the same). `Cargo.toml` declares `rust-version = "1.88"` (edition 2024) for every crate; no CI job checks that minimum, and the GUI's egui/eframe 0.37 may need a newer compiler. To match a release exactly, use the compiler recorded in that release's `environment.json` → `tool.rustc`. |
+| Rust | Pinned by [rust-toolchain.toml](../rust-toolchain.toml): **1.97.0** with rustfmt and clippy; `rustup` installs and selects it automatically inside the source tree (CI and the release job do the same). `Cargo.toml` declares `rust-version = "1.88"` (edition 2024) for the core and CLI and `1.95` for the GUI (egui/eframe 0.37); no CI job checks these minimums. To match a release exactly, use the compiler recorded in that release's `environment.json` → `tool.rustc`. |
 | Windows linker | Visual Studio 2022 Build Tools, workload *Desktop development with C++* (MSVC + Windows SDK); target `x86_64-pc-windows-msvc`. Static CRT is set in `.cargo/config.toml`. |
 | Linux | No system packages needed to build the CLI. |
 | Optional | Python 3.12 with `blake3 jsonschema pyhanko` for the oracles and the trust tests (`RV_TEST_PYTHON=python`). |

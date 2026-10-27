@@ -274,8 +274,8 @@ WhatsApp Chat with Ana Ruiz.txt,WhatsApp Chat with Ana Ruiz.txt,4,6,,"02/03/2026
 
 Open the export at lines 4–6 and compare the author, the text and the time as written; `utc` is that time in the
 chosen zone converted to UTC. For Telegram and Teams use `native_id` (the message id; `0002.msg` for Teams is in
-`source_file`). For CSV files use `native_id` (the data row number): the line numbers of CSV files with Windows
-line ends are one too low in this version ([theory.md B5.4](theory.md#b54-csv--tsv-with-a-column-mapping)). Lines
+`source_file`). For CSV files `line` is the file line and `native_id` the data row number
+([theory.md B5.4](theory.md#b54-csv--tsv-with-a-column-mapping)). Lines
 and rows that were **not** converted are not in `trace.csv`: the `UNPARSED_LINES` finding gives their count and
 the first three; review the rest of the export around them by hand.
 
@@ -286,7 +286,7 @@ What every finding shows and does not prove: [reports.md](reports.md#findings-ca
 | Finding | Check before relying on the RSMF |
 | --- | --- |
 | `PARSER_FAILED` (high) | Read the error; a damaged or unsupported export is not converted. Re-export if possible; never edit the export to make it pass (if you must, convert a documented copy and say so) |
-| `RSMF_SCHEMA_INVALID` / `RSMF_ROUNDTRIP_MISMATCH` (high) | Do not load that file. A `parent … is not an event in this file` error comes from a reply to a message of another day ([theory.md B7](theory.md#b7-slicing-conversation--day-and-the-10000-event-rule)); other errors: report them to engineering with the file |
+| `RSMF_SCHEMA_INVALID` / `RSMF_ROUNDTRIP_MISMATCH` (high) | Do not load that file. Report it to engineering with the file and the run's logs |
 | `EVIDENCE_HASH_MISMATCH_WITH_CASE` (high) | Expected and actual digests in the finding; who had the file since intake (case log) |
 | `UNPARSED_LINES` (medium) | Open the export at the quoted lines/rows: headers, a mixed format, damaged lines? Is content missing from the conversation? |
 | `DST_AMBIGUOUS_OR_MISSING_TIME` (medium) | Is the order of those messages plausible? For a repeated hour, the earlier instant was used |
@@ -406,7 +406,6 @@ On the whole-sample run above (one language) it checks 201 files; appending one 
 | `mixed date formats: …` / `inconsistent dates: …` / `… not a valid date as dmy` (`PARSER_FAILED`) | The WhatsApp file mixes formats or was edited; inspect the two quoted lines |
 | `no WhatsApp message lines found` | Not a WhatsApp export, or an unsupported locale format: send a redacted sample to engineering |
 | `no Teams message (IPM.SkypeTeams.*) among the .msg files` | The `.msg` files are e-mails or other items, not Teams messages |
-| `parent e-… is not an event in this file` (`RSMF_SCHEMA_INVALID`) | A reply to a message of another day; known defect ([theory.md B7](theory.md#b7-slicing-conversation--day-and-the-10000-event-rule)) |
 | `--intake hashinv needs the evidence to register (--input or --input-list)` / `… cannot be combined with --evidence` | [case-folder.md](case-folder.md#one-step-intake-with-rv-hashinv) |
 | `rv-hashinv not found (install RV HashInv ≥ 0.3.0, or give its path with --hashinv-exe or RV_HASHINV). Looked in: …` | Install RV HashInv or pass `--hashinv-exe` |
 | `rv-hashinv intake failed (exit code N); nothing was analysed. …` | Read rv-hashinv's own messages (last lines quoted) and its run folder |

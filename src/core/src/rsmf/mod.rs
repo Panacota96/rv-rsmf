@@ -340,7 +340,12 @@ pub fn build_slice(
         let mut body = e.body.clone();
         let mut atts = vec![];
         for (n, a) in e.attachments.iter().enumerate() {
-            match read_attachment(&a.data)? {
+            // An attachment that cannot be read is reported as missing for this event; the run goes on.
+            let (data, unreadable) = match read_attachment(&a.data) {
+                Ok(d) => (d, None),
+                Err(e) => (None, Some(e)),
+            };
+            match data {
                 Some(bytes) => {
                     let name = attachment_zip_name(e, n + 1, &a.display);
                     let sha = crate::hash::hash_bytes(&bytes, crate::hash::HashAlgo::Sha256);
@@ -356,9 +361,10 @@ pub fn build_slice(
                 }
                 None => {
                     missing += 1;
-                    let reason = match &a.data {
-                        AttachmentData::Missing { reason } => reason.as_str(),
-                        _ => "",
+                    let reason = match (&a.data, &unreadable) {
+                        (_, Some(err)) => format!("unreadable: {err}"),
+                        (AttachmentData::Missing { reason }, None) => reason.clone(),
+                        _ => String::new(),
                     };
                     if !body.is_empty() {
                         body.push('\n');
@@ -376,8 +382,15 @@ pub fn build_slice(
         if !atts.is_empty() {
             m.insert("attachments".into(), Value::Array(atts));
         }
+        // RSMF requires the parent to be an event of the same file. A reply to a message written on another
+        // day (another file) keeps the link as custom "reply_to" instead.
+        let mut reply_to = None;
         if let Some(par) = &e.parent {
-            m.insert("parent".into(), json!(par));
+            if s.events.iter().any(|&i| &p.events[i].id == par) {
+                m.insert("parent".into(), json!(par));
+            } else {
+                reply_to = Some(par.clone());
+            }
         }
         if e.deleted {
             m.insert("deleted".into(), json!(true));
@@ -435,6 +448,9 @@ pub fn build_slice(
             m.insert("edits".into(), Value::Array(es));
         }
         let mut cu = e.custom.clone();
+        if let Some(r) = reply_to {
+            cu.insert("reply_to".into(), r);
+        }
         if !e.source_time.is_empty() {
             cu.insert("source_time".into(), e.source_time.clone());
         }
@@ -980,6 +996,13 @@ pub fn validate_manifest(m: &Value, entries: &BTreeMap<String, String>) -> Valid
                 strict(format!("conversations[{i}] lists unknown participant {p}"));
             }
         }
+        if let Some(icon) = c["icon"].as_str()
+            && !entries.contains_key(icon)
+        {
+            strict(format!(
+                "conversations[{i}].icon '{icon}' is not in rsmf.zip"
+            ));
+        }
         if let Some(cu) = c["custodian"].as_str()
             && !pids.contains(cu)
         {
@@ -1138,11 +1161,19 @@ pub fn local_to_utc(local: chrono::NaiveDateTime, tz: Tz) -> (DateTime<Utc>, Opt
         chrono::LocalResult::Single(t) => (t.with_timezone(&Utc), None),
         chrono::LocalResult::Ambiguous(a, _) => (a.with_timezone(&Utc), Some("ambiguous")),
         chrono::LocalResult::None => {
-            let shifted = local + chrono::Duration::hours(1);
-            let t = tz
-                .from_local_datetime(&shifted)
-                .earliest()
-                .map(|t| t.with_timezone(&Utc))
+            // Skipped wall-clock time (clocks moved forward): read it with the UTC offset in force just before the
+            // change, i.e. as if the clock had not been changed yet. Equivalent to shifting it forward by the length
+            // of the gap (1 h in Europe, 30 min on Lord Howe Island).
+            use chrono::Offset;
+            let t = (1..=180)
+                .map(|m| local - chrono::Duration::minutes(m))
+                .find_map(|l| tz.from_local_datetime(&l).earliest())
+                .map(|before| {
+                    let off = before.offset().fix();
+                    Utc.from_utc_datetime(
+                        &(local - chrono::Duration::seconds(off.local_minus_utc() as i64)),
+                    )
+                })
                 .unwrap_or_else(|| Utc.from_utc_datetime(&local));
             (t, Some("nonexistent"))
         }
@@ -1329,5 +1360,63 @@ mod tests {
             rsmf_time(&local_to_utc(overlap, tz).0),
             "2026-10-25T00:30:00Z"
         );
+    }
+
+    #[test]
+    fn a_reply_to_another_day_stays_valid() {
+        let tz: Tz = "UTC".parse().unwrap();
+        let mut p = sample(2, tz);
+        p.events[1].timestamp = p.events[0].timestamp.map(|t| t + chrono::Duration::days(1));
+        p.events[1].parent = Some(p.events[0].id.clone());
+        let d = tempfile::tempdir().unwrap();
+        for s in slice(&p, tz) {
+            let (w, _) = write_slice(&p, &s, &opts(tz), d.path()).unwrap();
+            let (v, f) = validate_file(&w.path).unwrap();
+            assert!(v.ok(), "{v:?}");
+            if s.events.contains(&1) {
+                assert!(f.manifest["events"][0].get("parent").is_none());
+                let cu = f.manifest["events"][0]["custom"].as_array().unwrap();
+                assert!(
+                    cu.iter()
+                        .any(|c| c["name"] == "reply_to" && c["value"] == "e-000000")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unreadable_attachment_is_reported_missing_not_fatal() {
+        let tz: Tz = "UTC".parse().unwrap();
+        let mut p = sample(1, tz);
+        p.events[0].attachments.push(Attachment {
+            display: "gone.jpg".into(),
+            data: AttachmentData::File {
+                path: "/definitely/not/here.jpg".into(),
+            },
+        });
+        let d = tempfile::tempdir().unwrap();
+        let s = slice(&p, tz);
+        let (w, _) = write_slice(&p, &s[0], &opts(tz), d.path()).unwrap();
+        assert_eq!(w.missing_attachments, 1);
+        assert!(validate_file(&w.path).unwrap().0.ok());
+    }
+
+    #[test]
+    fn skipped_times_use_the_offset_before_the_change() {
+        // Lord Howe Island moves clocks forward by 30 minutes (02:00 +10:30 -> 02:30 +11:00) in October.
+        let tz: Tz = "Australia/Lord_Howe".parse().unwrap();
+        let gap = NaiveDate::from_ymd_opt(2026, 10, 4)
+            .unwrap()
+            .and_hms_opt(2, 10, 0)
+            .unwrap();
+        let (t, why) = local_to_utc(gap, tz);
+        assert_eq!(why, Some("nonexistent"));
+        assert_eq!(rsmf_time(&t), "2026-10-03T15:40:00Z"); // 02:10 at +10:30 = 02:40 at +11:00
+        let paris: Tz = "Europe/Paris".parse().unwrap();
+        let p = NaiveDate::from_ymd_opt(2026, 3, 29)
+            .unwrap()
+            .and_hms_opt(2, 30, 0)
+            .unwrap();
+        assert_eq!(rsmf_time(&local_to_utc(p, paris).0), "2026-03-29T01:30:00Z"); // 02:30 CET
     }
 }

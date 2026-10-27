@@ -1,4 +1,5 @@
-//! The pipeline both front-ends call: intake → hash + analyze each item → duplicates →
+//! The pipeline both front-ends call: (optional rv-hashinv intake) → hash + check each item against the case
+//! registry → conversion (exports → RSMF files, validated, read back, traced; see `convert.rs`) → duplicates →
 //! hashes.csv → per-item reports → statistics report. Every step is written to the audit log.
 //!
 //! With `case_dir` the run works inside a shared case folder (see `case.rs`): outputs go to

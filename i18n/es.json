@@ -109,7 +109,8 @@
     "conv_failed": "Esta exportación no se pudo convertir:",
     "exports": "Exportaciones de chat",
     "rsmf_files": "Archivos RSMF",
-    "failed": "fallidas"
+    "failed": "fallidas",
+    "passed": "superada"
   },
   "severity": {
     "high": "Alta",
@@ -161,7 +162,7 @@
     "DATE_ORDER_INFERRED": {
       "title": "Orden de fecha deducido de la exportación",
       "shows": "Las fechas numéricas se leyeron como %{order}: la línea %{line} (\"%{example}\") solo admite esa lectura.",
-      "does_not_prove": "No demuestra que todas las líneas se escribieran con la misma configuración del teléfono; las exportaciones mezcladas se señalan como líneas no interpretadas."
+      "does_not_prove": "No demuestra que todas las líneas se escribieran con la misma configuración del teléfono; una exportación que mezcla fechas día-primero y mes-primero se detiene con un error en lugar de convertirse."
     },
     "DATE_ORDER_CHOSEN": {
       "title": "Orden de fecha elegido por el perito",
