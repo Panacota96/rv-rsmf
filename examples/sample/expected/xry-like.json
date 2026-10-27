@@ -1,0 +1,15 @@
+{
+  "source": "csv",
+  "path": "evidence/csv/xry-like.csv",
+  "options": { "timezone": "America/Bogota", "csv_profile": "xry-draft", "csv_map": null },
+  "conversations": 2,
+  "events": 4,
+  "attachments_packed": 0,
+  "attachments_missing": 1,
+  "findings": [
+    "ATTACHMENT_REFERENCED_NOT_FOUND",
+    "CSV_MAPPING_DRAFT_PROFILE",
+    "PARTICIPANT_IDENTIFIED_BY_NUMBER_ONLY",
+    "UNPARSED_LINES"
+  ]
+}

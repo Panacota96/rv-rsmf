@@ -1,0 +1,22 @@
+# Column mapping for generic.csv (synthetic sample), found automatically as <csv stem>.map.toml. Times are wall-clock times in Spain:
+# convert with --timezone Europe/Madrid. 2026-10-25 02:30 happens twice there (end of summer time).
+[columns]
+timestamp = "fecha"
+timestamp_format = "%Y-%m-%d %H:%M:%S"
+conversation = "chat"
+sender = "remitente"
+sender_number = "numero"
+recipients = "destinatarios"
+body = "texto"
+direction = "sentido"
+application = "app"
+attachment = "adjunto"
+
+[direction]
+incoming = ["entrante"]
+outgoing = ["saliente"]
+
+[options]
+delimiter = ","
+encoding = "utf-8"
+skip_rows = 0
