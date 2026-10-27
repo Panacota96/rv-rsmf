@@ -1528,15 +1528,7 @@ mod tests {
                 assert!(p.exports[0].first.len() <= PREVIEW_ROWS);
                 assert!(s.can_start() && s.check_exports().is_ok());
             }
-            // TODO(parser): the WhatsApp parser is still a stub on this branch (Invalid "not implemented");
-            // once it lands, the arm above runs. The stub's error is not a usage error: nothing blocks.
-            None => {
-                assert_eq!(p.exports.len(), 1);
-                assert_eq!(p.exports[0].source, SourceKind::Whatsapp);
-                let err = p.exports[0].error.as_deref().unwrap_or_default();
-                assert!(err.contains("not implemented"), "{err}");
-                assert!(s.can_start());
-            }
+            None => panic!("the ambiguous WhatsApp file must ask for a date order"),
             Some(other) => panic!("unexpected usage error {other}"),
         }
         let _ = std::fs::remove_dir_all(&ev);
