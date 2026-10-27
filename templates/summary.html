@@ -10,6 +10,7 @@
 
 <p class="status status-{{ item.status }}">{{ item.status_label }}</p>
 <p>{{ item.summary_text }}</p>
+{% if conversion %}<p>{{ conversion.summary }}</p>{% endif %}
 
 <h2>{{ t.what_we_did }}</h2>
 <p>{{ t.method_text }}</p>

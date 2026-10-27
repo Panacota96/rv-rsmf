@@ -317,6 +317,13 @@
           ]
         }
       }
+    },
+    "conversion": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "RSMF conversion of this export (null when the item is not the primary file of a chat export)."
     }
   }
 }

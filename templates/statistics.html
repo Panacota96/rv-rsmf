@@ -25,6 +25,15 @@
   <div>{{ t.throughput }}</div><div>{{ totals.throughput_text }}</div>
 </div>
 
+<h2>{{ t.rsmf_conversion }}</h2>
+<div class="kv">
+  <div>{{ t.exports }}</div><div>{{ conversion.exports }}{% if conversion.exports_failed %} ({{ conversion.exports_failed }} {{ t.failed }}){% endif %}</div>
+  <div>{{ t.conversations }}</div><div>{{ conversion.conversations }}</div>
+  <div>{{ t.events }}</div><div>{{ conversion.events }}</div>
+  <div>{{ t.rsmf_files }}</div><div>{{ conversion.rsmf_files }}{% if conversion.rsmf_files_invalid %} ({{ conversion.rsmf_files_invalid }} {{ t.invalid }}){% endif %}</div>
+  <div>{{ t.attachments }}</div><div>{{ conversion.attachments_packed }}{% if conversion.attachments_missing %} (+{{ conversion.attachments_missing }} {{ t.missing }}){% endif %}</div>
+</div>
+
 <h2>{{ t.findings_by_severity }}</h2>
 <table><tr><th>{{ t.severity }}</th><th>{{ t.findings }}</th></tr>
 {% for row in severity_rows %}<tr><td><span class="badge sev-{{ row.key }}">{{ row.label }}</span></td><td>{{ row.count }}</td></tr>{% endfor %}

@@ -312,6 +312,13 @@
           }
         }
       }
+    },
+    "conversion": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "RSMF conversion totals (exports, conversations, events, files, invalid files, attachments)."
     }
   }
 }

@@ -31,6 +31,22 @@
 {% for h in hash_rows %}<tr><td>{{ h.algorithm }}</td><td class="mono">{{ h.value }}</td></tr>{% endfor %}
 </table>
 
+{% if conversion %}
+<h2>{{ t.rsmf_conversion }}</h2>
+<p>{{ conversion.summary }}</p>
+<div class="kv">
+  <div>{{ t.source_type }}</div><div>{{ conversion.source }}</div>
+  <div>{{ t.conversations }}</div><div>{{ conversion.conversations|join(", ") }}</div>
+  <div>{{ t.participants }}</div><div>{{ conversion.participants }}</div>
+  <div>{{ t.events }}</div><div>{{ conversion.events }}</div>
+  {% for f in conversion.facts %}<div>{{ f.name }}</div><div>{{ f.value }}</div>{% endfor %}
+</div>
+{% if conversion.files %}<table><tr><th>{{ t.file }}</th><th>{{ t.day }}</th><th>{{ t.events }}</th><th>{{ t.attachments }}</th><th>{{ t.valid }}</th><th>SHA-256</th></tr>
+{% for f in conversion.files[:200] %}<tr><td class="mono">{{ f.file }}</td><td>{{ f.day }}{% if f.part %} ({{ f.part }}){% endif %}</td><td>{{ f.events }}</td><td>{{ f.attachments }}{% if f.missing %} (+{{ f.missing }} {{ t.missing }}){% endif %}</td><td>{{ f.valid_label }}</td><td class="mono">{{ f.sha256 }}</td></tr>{% endfor %}
+</table>{% if conversion.files_total > 200 %}<p>{{ conversion.files_shown }} / {{ conversion.files_total }} — conversions.json</p>{% endif %}{% endif %}
+<p>{{ t.trace_note }}</p>
+{% endif %}
+
 <h2>{{ t.findings }}</h2>
 {% if findings %}{% for f in findings %}
 <div class="finding">

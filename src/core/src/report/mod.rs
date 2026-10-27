@@ -313,6 +313,7 @@ pub fn statistics_context(
 ) -> Value {
     let c = catalog(lang);
     let mut m = base(c, run);
+    m.insert("conversion".into(), conversion_totals(items));
     let mut sev: BTreeMap<Severity, u64> = BTreeMap::new();
     let mut codes: BTreeMap<String, u64> = BTreeMap::new();
     let mut types: BTreeMap<String, u64> = BTreeMap::new();
@@ -394,10 +395,42 @@ fn item_view(c: &Catalog, it: &ItemResult) -> Value {
     })
 }
 
+/// The conversion section of an item's reports (None when the item is not a chat export's primary file).
+fn conversion_view(c: &Catalog, it: &ItemResult) -> Value {
+    let Some(cv) = it.conversion.as_ref().filter(|cv| cv.primary) else {
+        return Value::Null;
+    };
+    let invalid = cv.files.iter().filter(|f| !f.valid).count();
+    let summary = if let Some(e) = &cv.error {
+        format!("{} {}", c.label("conv_failed"), e)
+    } else {
+        c.label(if invalid == 0 {
+            "conv_summary_ok"
+        } else {
+            "conv_summary_invalid"
+        })
+        .replace("%{files}", &cv.files.len().to_string())
+        .replace("%{events}", &cv.events.to_string())
+        .replace("%{conversations}", &cv.conversations.len().to_string())
+        .replace("%{invalid}", &invalid.to_string())
+    };
+    json!({
+        "source": cv.source, "summary": summary, "error": cv.error,
+        "conversations": cv.conversations.iter().map(|(_, d)| d.clone()).collect::<Vec<_>>(),
+        "participants": cv.participants, "events": cv.events,
+        "files": cv.files.iter().map(|f| json!({"file": f.file, "conversation": f.conversation, "day": f.day.clone().unwrap_or_else(|| c.label("undated")),
+            "part": f.part, "events": f.events, "attachments": f.attachments, "missing": f.missing_attachments,
+            "valid": f.valid, "valid_label": c.label(if f.valid { "valid" } else { "invalid" }), "sha256": f.sha256})).collect::<Vec<_>>(),
+        "files_shown": cv.files.len().min(200), "files_total": cv.files.len(),
+        "facts": cv.facts.iter().map(|(k, v)| json!({"name": k, "value": v})).collect::<Vec<_>>(),
+    })
+}
+
 pub fn item_context(lang: &str, run: &RunInfo, it: &ItemResult, audit: &AuditRef) -> Value {
     let c = catalog(lang);
     let mut m = base(c, run);
     m.insert("item".into(), item_view(c, it));
+    m.insert("conversion".into(), conversion_view(c, it));
     m.insert("case".into(), case_view(run));
     m.insert(
         "hash_rows".into(),
@@ -488,9 +521,33 @@ pub fn statistics_json(
         "case": run.case.as_ref().map(|c| c.to_json()),
         "items": items.iter().map(|it| json!({"index": it.index, "evidence_id": it.evidence_id, "path": it.path.display().to_string(), "size": it.size, "status": it.status(),
               "findings": it.findings.iter().map(|f| f.code.clone()).collect::<Vec<_>>(), "report_folder": format!("items/{}", it.folder())})).collect::<Vec<_>>(),
+        "conversion": conversion_totals(items),
         "limitations": LIMITATIONS,
         "audit": {"head": audit.head, "entries": audit.entries, "log_dir": audit.log_dir},
         "timestamp": if run.timestamp.is_object() { run.timestamp.clone() } else { json!({"status": "off"}) },
+    })
+}
+
+/// Exports, conversations, events and RSMF files of a run, from the items' conversion results.
+pub fn conversion_totals(items: &[ItemResult]) -> Value {
+    let convs: Vec<&crate::convert::ItemConversion> = items
+        .iter()
+        .filter_map(|i| i.conversion.as_ref())
+        .filter(|c| c.primary)
+        .collect();
+    let files: Vec<&crate::convert::FileRow> = convs.iter().flat_map(|c| &c.files).collect();
+    let mut by_source: BTreeMap<String, u64> = BTreeMap::new();
+    for c in &convs {
+        *by_source.entry(c.source.clone()).or_default() += 1;
+    }
+    json!({
+        "exports": convs.len(), "exports_failed": convs.iter().filter(|c| c.error.is_some()).count(),
+        "exports_by_source": by_source,
+        "conversations": convs.iter().map(|c| c.conversations.len()).sum::<usize>(),
+        "events": convs.iter().map(|c| c.events).sum::<usize>(),
+        "rsmf_files": files.len(), "rsmf_files_invalid": files.iter().filter(|f| !f.valid).count(),
+        "attachments_packed": files.iter().map(|f| f.attachments).sum::<usize>(),
+        "attachments_missing": files.iter().map(|f| f.missing_attachments).sum::<usize>(),
     })
 }
 
@@ -506,6 +563,7 @@ pub fn technical_json(run: &RunInfo, it: &ItemResult) -> Value {
                  "status": it.case_status, "intake_utc": it.intake_utc})),
         "hashes": it.hashes.iter().map(|(a, h)| (a.name().to_string(), json!(h))).collect::<serde_json::Map<_, _>>(),
         "findings": findings_json(it, &run.langs),
+        "conversion": it.conversion,
         "limitations": LIMITATIONS,
         "audit": {"first_seq": it.audit_first_seq, "last_seq": it.audit_last_seq},
     })
@@ -785,6 +843,37 @@ pub fn technical_pdf(ctx: &Value, run: &RunInfo) -> Result<Vec<u8>, String> {
             .map(|h| (s(h, "algorithm"), s(h, "value")))
             .collect(),
     ));
+    if ctx["conversion"].is_object() {
+        let cv = &ctx["conversion"];
+        b.push(Block::Heading(t("rsmf_conversion")));
+        b.push(Block::Para(s(cv, "summary")));
+        let mut rows = vec![
+            (t("source_type"), s(cv, "source")),
+            (t("participants"), s(cv, "participants")),
+            (t("events"), s(cv, "events")),
+        ];
+        for f in arr(cv, "facts") {
+            rows.push((s(f, "name"), s(f, "value")));
+        }
+        b.push(Block::Kv(rows));
+        for f in arr(cv, "files").iter().take(200) {
+            b.push(Block::Kv(vec![
+                (t("file"), s(f, "file")),
+                (
+                    t("events"),
+                    format!(
+                        "{} \u{00B7} {} {} \u{00B7} {}",
+                        s(f, "events"),
+                        s(f, "attachments"),
+                        t("attachments"),
+                        s(f, "valid_label")
+                    ),
+                ),
+                ("SHA-256".into(), s(f, "sha256")),
+            ]));
+        }
+        b.push(Block::Para(t("trace_note")));
+    }
     b.push(Block::Heading(t("findings")));
     let f = arr(ctx, "findings");
     if f.is_empty() {
@@ -839,6 +928,9 @@ pub fn summary_pdf(ctx: &Value, run: &RunInfo) -> Result<Vec<u8>, String> {
     let mut b = header(ctx, "title_summary", sub);
     b.push(Block::Status(s(ctx, "item.status_label")));
     b.push(Block::Para(s(ctx, "item.summary_text")));
+    if ctx["conversion"].is_object() {
+        b.push(Block::Para(s(&ctx["conversion"], "summary")));
+    }
     b.push(Block::Heading(t("what_we_did")));
     b.push(Block::Para(t("method_text")));
     b.push(Block::Heading(t("what_we_found")));
