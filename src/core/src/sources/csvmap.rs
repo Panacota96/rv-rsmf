@@ -773,7 +773,41 @@ fn load_mapping(
     }
 }
 
+/// Parses with the mapping chosen by [`load_mapping`]. When nothing was chosen (no --csv-map, no sibling
+/// mapping, default generic profile) and the generic columns are not in the header, the built-in tool
+/// profiles are tried in turn; a header that matches one of them is read with it (fact
+/// "profile_detected" = "yes") and still reported as a draft profile (CSV_MAPPING_DRAFT_PROFILE).
 pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, ParseError> {
+    let first = parse_with(export, opts);
+    let auto = opts.csv_map.is_none()
+        && opts.csv_profile == super::CsvProfile::Generic
+        && !sibling_mapping(&export.primary).is_file();
+    match first {
+        Err(ParseError::NeedsMapping(m)) if auto => {
+            for p in [
+                super::CsvProfile::XryDraft,
+                super::CsvProfile::CellebriteDraft,
+            ] {
+                let o = ParseOptions {
+                    csv_profile: p,
+                    ..opts.clone()
+                };
+                match parse_with(export, &o) {
+                    Ok(mut x) => {
+                        x.facts.insert("profile_detected".into(), "yes".into());
+                        return Ok(x);
+                    }
+                    Err(ParseError::NeedsMapping(_)) => continue,
+                    Err(e) => return Err(e),
+                }
+            }
+            Err(ParseError::NeedsMapping(m))
+        }
+        r => r,
+    }
+}
+
+fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, ParseError> {
     let (map, map_src) = load_mapping(export, opts)?;
     let user_map = !matches!(map_src, MappingSource::Profile(_));
     let bytes = export

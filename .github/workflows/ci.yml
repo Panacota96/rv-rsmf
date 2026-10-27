@@ -64,13 +64,22 @@ jobs:
         run: cargo run --locked -q -p rv-rsmf-cli -- self-test
       - name: Sample run
         shell: bash
-        run: cargo run --locked -q -p rv-rsmf-cli -- scan -i examples/sample/evidence --hash sha256,blake3 --lang all --out ci-out --progress none --no-timestamp
+        run: cargo run --locked -q -p rv-rsmf-cli -- convert -i examples/sample/evidence -r --timezone Europe/Paris --date-order dmy --hash sha256,blake3 --lang all --out ci-out --progress none --no-timestamp
       - name: Cross-language verification (Python re-checks the chain, hashes and JSON schemas)
         shell: bash
         run: |
           run=$(find ci-out/logs -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n 1)
           python tests/verify_chain.py "ci-out/logs/$run"
           python tests/validate_reports.py "ci-out/reports/$run"
+      - name: RSMF oracle (Python email package + Relativity's official RSMF 2.0 schema at a pinned commit)
+        shell: bash
+        run: |
+          curl -sSfL -o rsmf_schema_2_0_0.json https://raw.githubusercontent.com/relativitydev/rsmf-validator-samples/c717cd322264b46115d27d034a6107c8c91043d8/RSMFManifestSchema/rsmf_schema_2_0_0.json
+          run=$(find ci-out/logs -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n 1)
+          python tests/oracle_rsmf.py "ci-out/rsmf/$run" "ci-out/logs/$run/audit.jsonl" rsmf_schema_2_0_0.json
+          cargo build --locked -q -p rv-rsmf-cli
+          bin=target/debug/rv-rsmf; [ -f "$bin.exe" ] && bin="$bin.exe"
+          python tests/run_samples.py "$bin" rsmf_schema_2_0_0.json sample-check
       - name: Sample script (compares the tool's hashes.csv with expected_hashes.csv)
         if: runner.os == 'Linux'
         env:
@@ -94,7 +103,7 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          cargo run --locked -q -p rv-rsmf-cli -- scan -i examples/sample/evidence --out tsa-out --progress none | tee tsa.txt
+          cargo run --locked -q -p rv-rsmf-cli -- convert -i examples/sample/evidence -r --timezone Europe/Paris --date-order dmy --out tsa-out --progress none | tee tsa.txt
           grep -q "timestamp: ok" tsa.txt
           run=$(find tsa-out/logs -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n 1)
           cargo run --locked -q -p rv-rsmf-cli -- verify-log "tsa-out/logs/$run"

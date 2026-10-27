@@ -14,5 +14,11 @@
     "-p",
     "rv-rsmf-cli",
     "--"
+  ],
+  "sample_args": [
+    "--timezone",
+    "Europe/Paris",
+    "--date-order",
+    "dmy"
   ]
 }
