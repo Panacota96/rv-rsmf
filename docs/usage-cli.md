@@ -595,3 +595,36 @@ EXIT CODES:
      an evidence file differs from the registry.
 ```
 
+## rv-rsmf describe
+
+```text
+Describe this tool as JSON (schema rakvor.describe/1) for RV Hub and scripts
+
+Usage: rv-rsmf describe [OPTIONS]
+
+Options:
+      --json
+          Print JSON: one pretty-printed object with sorted keys.
+          Default: on (JSON is the only format)
+          Example: --json
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+DESCRIPTION:
+  Prints what this tool is, what it accepts and how to launch it, validated by
+  schemas/describe.schema.json. RV Hub reads it to list the tool, start its GUI on a case
+  folder (rv-rsmf-gui.exe --case-dir <CASE> [FILES...]) and suggest the tool for a file.
+  Fields: schema, tool, title, version, role (conversion), main_verb (convert), accepts
+  (extensions and signatures; "*" = any file), case_formats, log_formats, cli_exe,
+  gui_exe, exit_codes. Nothing is read or written; no audit log is created.
+  The role is conversion, although in a case folder rv-rsmf acts as an analysis tool: it
+  verifies every item against the evidence registry and registers nothing.
+
+EXAMPLES:
+  rv-rsmf describe --json
+
+EXIT CODES:
+  0  The description was printed.
+```
+

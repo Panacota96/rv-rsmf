@@ -186,6 +186,36 @@ any `.rsmf` — ours or another vendor's — and prints each problem (`schema: �
 least one invalid, 1 a file could not be read. The conversion already ran the same checks plus a read-back; run
 `validate` again on the copy you deliver, after any transfer.
 
+### Starting from RV Hub: `--case-dir` and `describe --json`
+
+RV Hub (the Rakvor launcher) finds the installed tools, opens them on a case folder and suggests which one fits a
+file. It relies on two entry points of RV RSMF:
+
+- **`rv-rsmf-gui.exe --case-dir <CASE> [FILES...]`** starts the desktop app with **Case folder** already filled
+  (`--case-dir=<CASE>` also works). Other arguments are pre-loaded as evidence, as when files are dropped on the
+  icon. The preset is written to the run's audit log as `ui_case_dir_from_launcher` (path and `at_utc`) followed by
+  `ui_case_dir_changed`. `--case-dir` without a folder is ignored: the window says so and the audit log records
+  `ui_launch_argument_ignored`.
+- **`rv-rsmf describe --json`** prints one JSON object (sorted keys) that RV Hub reads; it is hidden from
+  `rv-rsmf --help` but listed in [usage-cli.md](usage-cli.md). It reads and writes nothing. Schema:
+  [`schemas/describe.schema.json`](../schemas/describe.schema.json) (`rakvor.describe/1`, identical in every Rakvor
+  tool).
+
+| Field | Meaning |
+| --- | --- |
+| `schema` | `rakvor.describe/1` |
+| `tool`, `title`, `version` | `rv-rsmf`, `RV RSMF`, the product version (`version.txt`) |
+| `role` | `conversion`. In a case folder rv-rsmf still acts as an *analysis* tool (its case role, `CASE_ROLE` in the code): it verifies every item against the evidence registry and registers nothing. `conversion` tells RV Hub what the tool produces (RSMF files), the case role tells the case folder how the tool treats evidence |
+| `main_verb` | `convert`: the command that does the main work |
+| `accepts` | `extensions` (lower case, no dot) and content `signatures` (`format` + `match`: hex bytes at an offset); `"*"` = any file |
+| `case_formats`, `log_formats` | `rakvor.case/1`; `rakvor.audit/1` = `logs/audit.jsonl`, `rakvor.review/1` = `logs/review.jsonl` |
+| `cli_exe`, `gui_exe` | `rv-rsmf.exe`, `rv-rsmf-gui.exe` |
+| `exit_codes` | The meaning of 0, 1, 2, 3 and 130 (the exit-code table under Troubleshooting) |
+
+```powershell
+rv-rsmf describe --json
+```
+
 ## CSV column mapping reference
 
 A mapping is a TOML file. rv-rsmf uses, in this order: `--csv-map FILE`; a file `<csv stem>.map.toml` next to the
@@ -391,6 +421,7 @@ On the whole-sample run above (one language) it checks 201 files; appending one 
 | `verify-case` | case intact (warnings printed) | not a case folder | — | a check failed | — |
 | `timestamp` | obtained and logged | TSA unreachable | — | log missing or broken (nothing added) | — |
 | `self-test` | all pass | a failure: do not use the build | — | — | — |
+| `describe` | description printed | — | usage error (unknown option) | — | — |
 
 ### Messages
 
