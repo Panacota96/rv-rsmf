@@ -41,6 +41,10 @@ be edited, and you may start without adding evidence (every registered item is e
 result panel lists the **evidence id** of every item (E0001…) and its status (registered, verified, mismatch, not in
 registry). The change is audited as `ui_case_dir_changed`.
 
+RV Hub opens the app with the case folder already filled: `rv-rsmf-gui.exe --case-dir <CASE> [FILES...]` (or
+`--case-dir=<CASE>`). The audit log then starts with `ui_case_dir_from_launcher` (the path and `at_utc`); a
+`--case-dir` without a folder is ignored, shown in the window and logged as `ui_launch_argument_ignored`.
+
 ## What the GUI records
 
 Your choices are part of the evidence record. Before the run starts, the GUI writes them to the audit log:
@@ -50,6 +54,7 @@ Your choices are part of the evidence record. Before the run starts, the GUI wri
 | Add / remove evidence | `ui_input_added`, `ui_input_removed` |
 | Change hash selection | `ui_hash_selection_changed` |
 | Change language / subfolders | `ui_language_changed`, `ui_recursive_changed` |
+| Opened by RV Hub with `--case-dir` | `ui_case_dir_from_launcher`, `ui_case_dir_changed` (or `ui_launch_argument_ignored`) |
 | Press Start | `ui_start_clicked` (final settings) |
 | Press Cancel | `item_cancelled`, `run_cancelled` |
 
