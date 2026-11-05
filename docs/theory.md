@@ -952,9 +952,21 @@ gen_time, covers_seq, head, token_sha256, file). Offline → `timestamp_pending`
 re-verifies the chain and appends `timestamp_obtained` for the then-current head.
 
 `verify-log` and `verify-case` re-check that entry `covers_seq` still exists, the `.tsr` SHA-256 against
-`token_sha256`, the TSA status and that the imprint equals the `entry_hash` of `covers_seq`. They do **not** verify
-the TSA's signature, certificate chain, policy OID or accuracy: do that with OpenSSL against the TSA's published
-chain ([usage.md](usage.md#timestamps-signing-and-verifying-a-run)) before relying on the time in court (gap G18).
+`token_sha256`, the TSA status and that the imprint equals the `entry_hash` of `covers_seq`. They also verify the
+TSA's **CMS signature** (`trust::verify_token`, the same code as RV Hub, rv-pdfauth and rv-imgauth): the content
+type is `id-ct-TSTInfo`; there is exactly one SignerInfo and its certificate is in the token; the signed attributes
+carry content-type, a message-digest equal to the digest of the TSTInfo, and an ESS signing-certificate (v1 or v2)
+matching that certificate; the RSA PKCS#1 v1.5 signature over the signed attributes verifies; and the certificate
+has the `timeStamping` extended key usage (RFC 3161 §2.3). Any failure ("signature value does not verify") fails the
+log (exit 3).
+
+The **TSA certificate chain** is validated only by `verify-log --tsa-ca <CA bundle>` (PEM or DER): a path from the
+TSA certificate, through the certificates in the token, to one of the bundle's certificates, checking each RSA
+signature, the validity period at `genTime` and the CA flag of every issuer. Without it the output says "chain not
+checked": the token is shown to be signed by the certificate it carries, not that this certificate belongs to a TSA
+you trust. **Revocation (CRL/OCSP), policy OID and accuracy are never checked**, and only RSA signers are supported
+(an ECDSA token fails as "signature not checked"). Check revocation with OpenSSL against the TSA's published chain
+([usage.md](usage.md#timestamps-signing-and-verifying-a-run)) before relying on the time in court (gap G18).
 The default TSA URL is plain HTTP; integrity rests on the TSA's signature. Standards: RFC 3161, RFC 5816, RFC 5652.
 
 ## B17 Signed PDF reports

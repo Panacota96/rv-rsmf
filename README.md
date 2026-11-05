@@ -60,7 +60,7 @@ exports people actually hand over, and keeps a record that lets anyone check eac
 | **Checks** | Official schema (bundled, draft-07) + strict rules (unknown keys, references, UTC times, counts, attachments in the zip) + read-back of every file; `rv-rsmf validate` checks any `.rsmf`, ours or another tool's. |
 | **Traceability** | `trace.csv` / `trace.json`: one row per event; every event also carries `source_file`, `source_lines` or `source_id` and the original time text in its RSMF custom fields. |
 | **Hashing** | 1 or 2 of md5, sha1, sha256, sha512, sha3-256, blake3, computed in the same read; every `.rsmf` and attachment hashed and logged. |
-| **Auditable** | Every action goes to `logs/<RUN-ID>/audit.jsonl`, each entry carrying the hash of the previous one; RFC 3161 timestamp of the chain head; `verify-log` detects any edit. |
+| **Auditable** | Every action goes to `logs/<RUN-ID>/audit.jsonl`, each entry carrying the hash of the previous one; RFC 3161 timestamp of the chain head; `verify-log` detects any edit and verifies the TSA's signature (`--tsa-ca` also validates its chain). |
 | **Reports** | Statistics per run; per export a technical review, a customer summary and a custody form (Colombia or France, plus English) — HTML, PDF and JSON, in English, Spanish or French. |
 | **Case folder** | `--case-dir` links the Rakvor tools of one case: each file is re-hashed and verified against the registry written at intake by rv-hashinv (`--intake hashinv` runs it first). See [docs/case-folder.md](docs/case-folder.md). |
 

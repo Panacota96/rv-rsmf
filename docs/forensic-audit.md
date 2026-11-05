@@ -93,8 +93,10 @@ sequenceDiagram
 - The token is stored as `timestamp-<N>.tsr` (DER) and `timestamp-<N>.json` (readable summary).
 - Offline: the run still completes; `rv-rsmf timestamp <log folder>` later re-verifies the chain and appends
   `timestamp_obtained` — earlier entries are never rewritten.
-- `verify-log` checks each token's imprint against the stored head and that entry `#N` still exists. It does
-  **not** check the TSA's signature or certificate chain: run
+- `verify-log` checks each token's imprint against the stored head, that entry `#N` still exists, and the TSA's
+  CMS signature (ESS signing-certificate, message digest, RSA signature, `timeStamping` key usage); `verify-case`
+  does the same for every run. The TSA certificate chain is validated only with `verify-log --tsa-ca <CA bundle>`
+  (at genTime); without it the output says "chain not checked". Revocation is never checked: for that run
   `openssl ts -verify -digest <head> -in timestamp-<N>.tsr -CAfile <TSA chain>` (gap G18).
 - `--no-timestamp` (or `RV_NO_TIMESTAMP=1`) disables it; tests use a local TSA (`tests/fake_tsa.py`).
 - A timestamp proves the log existed at that time, not that its content is true.

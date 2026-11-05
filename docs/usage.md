@@ -333,8 +333,17 @@ What every finding shows and does not prove: [reports.md](reports.md#findings-ca
 
 **Timestamps.** By default each run asks the TSA (`http://timestamp.digicert.com`, change with `--tsa-url`) to sign
 the audit chain head before the statistics report. Offline, the run logs `timestamp_pending`; later run
-`rv-rsmf timestamp <log folder>`. `verify-log` checks the token's imprint, **not** the TSA's signature (gap G18):
-do that with OpenSSL (Git for Windows ships `openssl.exe`):
+`rv-rsmf timestamp <log folder>`. `verify-log` checks the token's imprint and the TSA's CMS signature
+(`TSA signature valid (signer: …)`); the TSA certificate chain is validated only with `--tsa-ca`:
+
+```bash
+rv-rsmf verify-log <log folder> --tsa-ca <TSA roots.pem>
+# → … TSA signature valid (signer: …); chain validated to … (revocation not checked)
+# without --tsa-ca: … chain not checked (pass --tsa-ca <CA bundle> to validate it)
+```
+
+An unreadable bundle exits 1; a signature or chain failure exits 3. Revocation is never checked (gap G18): for
+that, and as an independent second check, use OpenSSL (Git for Windows ships `openssl.exe`):
 
 ```bash
 cd <log folder>
