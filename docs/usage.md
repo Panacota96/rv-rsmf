@@ -342,8 +342,10 @@ rv-rsmf verify-log <log folder> --tsa-ca <TSA roots.pem>
 # without --tsa-ca: … chain not checked (pass --tsa-ca <CA bundle> to validate it)
 ```
 
-An unreadable bundle exits 1; a signature or chain failure exits 3. Revocation is never checked (gap G18): for
-that, and as an independent second check, use OpenSSL (Git for Windows ships `openssl.exe`):
+An unreadable bundle exits 1; a signature or chain failure exits 3; a token the log records whose `.tsr` or
+`.json` is missing exits 3 too. Revocation is never checked (gap G18). As an independent **signature and chain**
+check, use OpenSSL (Git for Windows ships `openssl.exe`); it does not check revocation either (no CRL is supplied
+and OpenSSL does not query OCSP):
 
 ```bash
 cd <log folder>
@@ -353,8 +355,13 @@ openssl ts -reply -in timestamp-$N.tsr -text              # genTime, policy OID,
 openssl ts -reply -in timestamp-$N.tsr -token_out -out token.der
 openssl pkcs7 -inform DER -in token.der -print_certs > tsa-certs.pem
 openssl ts -verify -digest "$H" -in timestamp-$N.tsr -CAfile <TSA root.pem> -untrusted tsa-certs.pem
-# → "Verification: OK"
+# → "Verification: OK"  (signature and chain only, not revocation)
 ```
+
+Establish the TSA certificate's revocation status separately, from CRL/OCSP evidence that covers genTime (a CRL
+issued after genTime by the TSA's CA, or an OCSP response archived at stamping time), e.g.
+`openssl verify -crl_check -CRLfile tsa-ca.crl -CAfile <TSA root.pem> -untrusted tsa-certs.pem -attime <genTime-epoch> tsa.pem`,
+or `rv-certcheck analyze --crl … --ocsp …`.
 
 **Signing.** `--sign-cert <file.p12|.pfx>` signs every PDF report with your certificate (RSA only); the password
 comes from `RV_SIGN_PASSWORD` (or `--sign-pass-env NAME`) or a prompt without echo, and is never logged:

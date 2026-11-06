@@ -371,7 +371,8 @@ quoted article text is [V]):
   certificate chain and revocation at stamping time. rv-rsmf's `verify-log` checks that the token's imprint
   equals the stored head (and the token file's digest) and verifies the TSA's CMS signature; it validates the TSA
   certificate chain only with `--tsa-ca <TSA roots>`, and does **not** check revocation, policy or accuracy (G18):
-  run `verify-log --tsa-ca` and the OpenSSL check in the [checklist](#examiner-checklist-before-filing-a-report).
+  run `verify-log --tsa-ca` and the OpenSSL signature/chain check, and establish revocation separately from CRL/OCSP
+  evidence covering genTime, as in the [checklist](#examiner-checklist-before-filing-a-report).
 
 | # | Requirement | Source | How rv-rsmf meets it | Status |
 | --- | --- | --- | --- | --- |
@@ -510,7 +511,7 @@ while documenting this tool's code at this commit; each row states what remains.
 | G15 | Scope: no acquisition of devices or accounts; the tool works on exports made by others | ISO-11 | Declared; acquire with dedicated tools and document how the export was made | — | Examiner |
 | G16 | No ANSSI PRIS qualification (market positioning, not admissibility) | §5.5 | — | Optional roadmap item | Firm |
 | G17 | Source access offered without a defined protocol; `LICENSE` is the Rakvor source-auditable licence but still a draft not reviewed by a lawyer | CO-P17, FR-P11, CO-C5 | Provide the exact tagged source on request | Standard NDA and inspection protocol; counsel review of the licence | Firm + Counsel |
-| G18 | `verify-log` / `verify-case` check a token's imprint against the stored head, the token file's digest and the TSA's CMS signature; the TSA certificate chain only with `verify-log --tsa-ca`; **not** revocation, policy OID or accuracy | EU-4, CO-L9 | `verify-log --tsa-ca <TSA roots>`; revocation with `openssl ts -verify` or rv-certcheck (checklist step 12) | Offline CRL/OCSP checking of the TSA certificate, then policy checks | Eng. |
+| G18 | `verify-log` / `verify-case` check a token's imprint against the stored head, the token file's digest and the TSA's CMS signature; the TSA certificate chain only with `verify-log --tsa-ca`; **not** revocation, policy OID or accuracy | EU-4, CO-L9 | `verify-log --tsa-ca <TSA roots>`; revocation from CRL/OCSP evidence covering genTime (`openssl verify -crl_check` with that CRL, or rv-certcheck `--crl`/`--ocsp`; `openssl ts -verify` alone does not check it) (checklist step 12) | Offline CRL/OCSP checking of the TSA certificate, then policy checks | Eng. |
 | G19 | No command re-verifies the output files (`.rsmf`, trace, reports) against the digests in the audit log | ISO-1, CO-P2 | Script in [usage.md](usage.md#timestamps-signing-and-verifying-a-run) | `verify-run` command | Eng. |
 | G20 | The evidence is read several times (hash pass; detection; parser; attachment packing) and the bytes parsed are **not** re-hashed against the first pass; `mtime_unchanged` covers the hash pass only | CO-P5, ISO-7 | Convert a write-protected copy only | Parse from the hashed bytes, or re-hash what the parser read and compare (as rv-rsmf does) | Eng. |
 | G21 | No independent second parser of the exports (the oracles check the RSMF output, not that the parser read the export correctly) and no fuzzing of the parsers | CO-J8, US-8, ISO-3, CO-P14 | Spot-check messages via `trace.csv`; compare counts with another tool when available | Cross-check against an independent parser (e.g. whatsapp-chat-parser) on a corpus; cargo-fuzz targets per parser | Eng. |
@@ -551,8 +552,9 @@ while documenting this tool's code at this commit; each row states what remains.
     digests ([usage.md](usage.md#timestamps-signing-and-verifying-a-run), step 4).
 12. **Timestamp**: `timestamp_obtained` is present (or obtained later with `rv-rsmf timestamp`),
     `rv-rsmf verify-log <log folder> --tsa-ca <TSA roots>` prints `chain validated to …` (not `chain not checked`),
-    and, for revocation, the token was verified independently with OpenSSL against the TSA's certificate chain
-    (G18). For proceedings needing a presumption, a
+    the token was verified independently with OpenSSL (`openssl ts -verify`: a signature/chain check only), and the
+    TSA certificate's revocation status at genTime was established separately from CRL/OCSP evidence covering
+    genTime, kept with the case (G18). For proceedings needing a presumption, a
     qualified (EU) or ECD (Colombia) TSA was used.
 13. **Trace sampling**: a sample of messages (including the first and last of each conversation and every message
     near an unparsed line) was compared with the export through `trace.csv`; every `UNPARSED_LINES` example was
