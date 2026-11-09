@@ -938,7 +938,7 @@ fn attr_value_key(v: &Any) -> Vec<u8> {
     let raw = v.value();
     let text = match u8::from(der::Tagged::tag(v)) {
         0x0c | 0x13 | 0x16 | 0x14 => String::from_utf8(raw.to_vec()).ok(),
-        0x1e if raw.len().is_multiple_of(2) => String::from_utf16(
+        0x1e if raw.len() & 1 == 0 => String::from_utf16(
             &raw.chunks(2)
                 .map(|p| u16::from_be_bytes([p[0], p[1]]))
                 .collect::<Vec<_>>(),
@@ -1070,10 +1070,12 @@ fn check_names(
         if !permitted_dn.is_empty() && !permitted_dn.iter().any(|b| dn_within(name, b)) {
             return violation(&format!("{} is outside the permitted subtrees", name));
         }
-        for st in excluded {
-            if let G::DirectoryName(b) = &st.base
-                && dn_within(name, b)
-            {
+        let excluded_dn = excluded.iter().filter_map(|s| match &s.base {
+            G::DirectoryName(n) => Some(n),
+            _ => None,
+        });
+        for b in excluded_dn {
+            if dn_within(name, b) {
                 return violation(&format!("{} is inside the excluded subtree {}", name, b));
             }
         }
@@ -1113,9 +1115,7 @@ fn check_path(path: &[&Certificate]) -> Result<(), String> {
                 }
             }
         }
-        if let Some((k, _)) = &ku
-            && !k.key_cert_sign()
-        {
+        if ku.as_ref().is_some_and(|(k, _)| !k.key_cert_sign()) {
             return Err(format!(
                 "certificate {} may not sign certificates (its keyUsage lacks keyCertSign)",
                 subject(c)
@@ -1132,13 +1132,14 @@ fn check_path(path: &[&Certificate]) -> Result<(), String> {
                 ));
             }
         }
-        if let Some((eku, true)) =
-            decode_ext::<ExtendedKeyUsage>(c, OID_EXT_EKU, "extendedKeyUsage")?
-            && !eku
-                .0
-                .iter()
-                .any(|p| *p == oid(OID_KP_TIME_STAMPING) || *p == oid(OID_ANY_EKU))
-        {
+        let ca_eku = decode_ext::<ExtendedKeyUsage>(c, OID_EXT_EKU, "extendedKeyUsage")?;
+        if ca_eku.is_some_and(|(eku, critical)| {
+            critical
+                && !eku
+                    .0
+                    .iter()
+                    .any(|p| *p == oid(OID_KP_TIME_STAMPING) || *p == oid(OID_ANY_EKU))
+        }) {
             return Err(format!(
                 "certificate {} has a critical extended key usage without timeStamping",
                 subject(c)
