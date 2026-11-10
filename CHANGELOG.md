@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please and reviewed by a human.
 
+## [0.3.1](https://github.com/Panacota96/rv-rsmf/compare/v0.3.0...v0.3.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **security:** patch dependency advisories, blind RSA signing, check advisories in CI ([2277631](https://github.com/Panacota96/rv-rsmf/commit/22776316a061ab41cb30a374012d3f708de81f54))
+* **security:** patch dependency advisories, blind RSA signing, check advisories in CI ([ed62ad4](https://github.com/Panacota96/rv-rsmf/commit/ed62ad48bb4ce67a6e42359f04a287d697fc1077))
+
 ## [0.3.0](https://github.com/Panacota96/rv-rsmf/compare/v0.2.0...v0.3.0) (2026-11-10)
 
 
