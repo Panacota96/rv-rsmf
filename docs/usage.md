@@ -333,8 +333,19 @@ What every finding shows and does not prove: [reports.md](reports.md#findings-ca
 
 **Timestamps.** By default each run asks the TSA (`http://timestamp.digicert.com`, change with `--tsa-url`) to sign
 the audit chain head before the statistics report. Offline, the run logs `timestamp_pending`; later run
-`rv-rsmf timestamp <log folder>`. `verify-log` checks the token's imprint, **not** the TSA's signature (gap G18):
-do that with OpenSSL (Git for Windows ships `openssl.exe`):
+`rv-rsmf timestamp <log folder>`. `verify-log` checks the token's imprint and the TSA's CMS signature
+(`TSA signature valid (signer: …)`); the TSA certificate chain is validated only with `--tsa-ca`:
+
+```bash
+rv-rsmf verify-log <log folder> --tsa-ca <TSA roots.pem>
+# → … TSA signature valid (signer: …); chain validated to … (revocation not checked)
+# without --tsa-ca: … chain not checked (pass --tsa-ca <CA bundle> to validate it)
+```
+
+An unreadable bundle exits 1; a signature or chain failure exits 3; a token the log records whose `.tsr` or
+`.json` is missing exits 3 too. Revocation is never checked (gap G18). As an independent **signature and chain**
+check, use OpenSSL (Git for Windows ships `openssl.exe`); it does not check revocation either (no CRL is supplied
+and OpenSSL does not query OCSP):
 
 ```bash
 cd <log folder>
@@ -344,8 +355,15 @@ openssl ts -reply -in timestamp-$N.tsr -text              # genTime, policy OID,
 openssl ts -reply -in timestamp-$N.tsr -token_out -out token.der
 openssl pkcs7 -inform DER -in token.der -print_certs > tsa-certs.pem
 openssl ts -verify -digest "$H" -in timestamp-$N.tsr -CAfile <TSA root.pem> -untrusted tsa-certs.pem
-# → "Verification: OK"
+# → "Verification: OK"  (signature and chain only, not revocation)
 ```
+
+Establish the TSA certificate's revocation status separately, from CRL/OCSP evidence that covers genTime (a CRL
+issued after genTime by the TSA's CA, or an OCSP response archived at stamping time), e.g.
+`openssl verify -crl_check -CRLfile tsa-ca.crl -CAfile <TSA root.pem> -untrusted tsa-certs.pem -attime <genTime-epoch> tsa.pem`,
+or `rv-certcheck analyze --crl … --ocsp …`.
+
+> **CRL dates and `-attime`.** OpenSSL applies `-attime` to the CRL as well, so `openssl verify -crl_check -attime <genTime-epoch>` only works with a CRL whose `thisUpdate`–`nextUpdate` interval contains genTime; a CRL issued after genTime fails with "CRL is not yet valid". To use a later CRL as evidence, check its signature (`openssl crl -in tsa-ca.crl -CAfile <TSA root.pem> -noout -verify`), then look up the TSA certificate's serial in it (`openssl crl -in tsa-ca.crl -noout -text`): absent, or listed with a revocation date after genTime, means not revoked at genTime. A CA may drop expired certificates from its CRLs, so for a TSA certificate that has since expired an absent serial is not conclusive: use a CRL from before its expiry, or an OCSP response archived at stamping time.
 
 **Signing.** `--sign-cert <file.p12|.pfx>` signs every PDF report with your certificate (RSA only); the password
 comes from `RV_SIGN_PASSWORD` (or `--sign-pass-env NAME`) or a prompt without echo, and is never logged:
