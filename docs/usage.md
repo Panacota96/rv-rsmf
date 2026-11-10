@@ -363,6 +363,8 @@ issued after genTime by the TSA's CA, or an OCSP response archived at stamping t
 `openssl verify -crl_check -CRLfile tsa-ca.crl -CAfile <TSA root.pem> -untrusted tsa-certs.pem -attime <genTime-epoch> tsa.pem`,
 or `rv-certcheck analyze --crl … --ocsp …`.
 
+> **CRL dates and `-attime`.** OpenSSL applies `-attime` to the CRL as well, so `openssl verify -crl_check -attime <genTime-epoch>` only works with a CRL whose `thisUpdate`–`nextUpdate` interval contains genTime; a CRL issued after genTime fails with "CRL is not yet valid". To use a later CRL as evidence, check its signature (`openssl crl -in tsa-ca.crl -CAfile <TSA root.pem> -noout -verify`), then look up the TSA certificate's serial in it (`openssl crl -in tsa-ca.crl -noout -text`): absent, or listed with a revocation date after genTime, means not revoked at genTime. A CA may drop expired certificates from its CRLs, so for a TSA certificate that has since expired an absent serial is not conclusive: use a CRL from before its expiry, or an OCSP response archived at stamping time.
+
 **Signing.** `--sign-cert <file.p12|.pfx>` signs every PDF report with your certificate (RSA only); the password
 comes from `RV_SIGN_PASSWORD` (or `--sign-pass-env NAME`) or a prompt without echo, and is never logged:
 
