@@ -20,6 +20,7 @@ pub mod i18n;
 pub mod input;
 pub mod intake;
 pub mod model;
+pub mod outputs;
 pub mod report;
 pub mod rsmf;
 pub mod run;
