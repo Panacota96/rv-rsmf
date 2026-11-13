@@ -196,11 +196,17 @@ flowchart TB
     E -- no --> X
     E -- yes --> F{"case_linked → run_started<br/>and run_finished → final audit entry?"}
     F -- no --> X
-    F -- yes --> OK["OK (exit 0)<br/>warnings: runs without run_finished"]
+    F -- yes --> R{"every output the run's<br/>audit.jsonl records unchanged?"}
+    R -- no --> X
+    R -- yes --> OK["OK (exit 0)<br/>warnings: runs without run_finished"]
 ```
 
 1. `rv-rsmf verify-case <CASE>` (rv-hashinv has the same command). Exit 0 = intact, 3 = broken, 1 = not a case
-   folder. `--rehash` also re-reads every registered file still reachable and compares it with the registry.
+   folder. Every output file a run's audit log records (reports, `.rsmf` files, traces, `hashes.csv`,
+   `environment.json`) is re-hashed: an edited, deleted or replaced output is exit 3, named as
+   `run <RUN-ID>: output rsmf/…` (or `reports/…`); the line `outputs: N verified of M recorded by the runs' audit
+   logs` counts them. `--rehash` also re-reads every registered file still reachable and compares it with the
+   registry.
 2. Independently: `python tests/verify_chain.py <CASE>/runs/rv-rsmf/<RUN-ID>/logs`; `sha256sum
    evidence/registry.json` must equal the last `registry_sha256` in `case-log.jsonl`.
 3. `rv-rsmf validate <CASE>/runs/rv-rsmf/<RUN-ID>/rsmf` re-checks every RSMF file; compare their SHA-256 with the

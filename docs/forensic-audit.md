@@ -37,7 +37,7 @@ example with real hashes is in [theory.md B14](theory.md#b14-the-audit-hash-chai
 implementation:
 
 ```bash
-rv-rsmf verify-log rakvor-out/logs/<RUN-ID>             # exit 0 intact, 3 broken or truncated
+rv-rsmf verify-log rakvor-out/logs/<RUN-ID>             # exit 0 intact, 3 broken, truncated or an output changed
 python tests/verify_chain.py rakvor-out/logs/<RUN-ID>   # independent re-implementation (chain + hashes.csv)
 ```
 
@@ -65,6 +65,42 @@ flowchart LR
 A standalone run timestamps the head **before** writing `timestamp_obtained`, `statistics_report_written` and
 `run_finished`, so those 3 entries are reported as "cannot be proven complete"; a run in a case folder is anchored to
 its last entry by the case log.
+
+### Recorded outputs: the files the log vouches for
+
+The chain proves that the *digests* recorded in the log are unchanged, not that the files they describe still
+have them. `verify-log` (and `verify-case`, for every run) therefore re-hashes every output file the log records
+and compares it with every digest recorded for it ([src/core/src/outputs.rs](../src/core/src/outputs.rs), shared
+byte-identical by every Rakvor tool):
+
+```mermaid
+flowchart LR
+    A["audit.jsonl (chain intact)"] --> R["recorded files<br/>path → digests; the latest entry wins"]
+    R --> S{"safe relative path,<br/>inside the run folder?"}
+    S -- no --> X["problem: rejected, not read"]
+    S -- yes --> E{"exists, regular file?"}
+    E -- no --> M["problem: missing / replaced"]
+    E -- yes --> H{"every recorded<br/>digest equal?"}
+    H -- no --> C["problem: changed (named, both digests)"]
+    H -- yes --> V["verified"]
+```
+
+| Entry | File (run folder) |
+| --- | --- |
+| `environment_recorded`, `hash_register_written` | `logs/environment.json`, `logs/hashes.csv` |
+| `rsmf_written` (`details.hashes`, `details.sha256`) | `rsmf/<export>/<conversation>/<day>.rsmf` for every RSMF file |
+| `trace_written` | `rsmf/trace.csv`, `rsmf/trace.json`, `rsmf/conversions.json` |
+| `item_reports_written` | `reports/<folder>/<file>` for every report file of the item |
+| `statistics_report_written` | `reports/statistics.json` and every `statistics.<LANG>.html/.pdf` |
+| `timestamp_obtained` | not re-hashed here: the token is checked by the timestamp verification below |
+
+A standalone run's folders are `<OUT>/logs/<RUN-ID>`, `<OUT>/reports/<RUN-ID>` and `<OUT>/rsmf/<RUN-ID>` (each its
+own boundary); a case run's are `<CASE>/runs/<tool>/<RUN-ID>/logs`, `/reports` and `/rsmf` (the run folder is the
+boundary). A recorded path that is absolute, contains `..`, a drive, `\` or `:`, or resolves outside the boundary
+through a symlink or junction is rejected and never read. Output: `outputs: N verified of M recorded
+(algorithms)`, then any file not re-hashed with the reason. Files the run never recorded (added to the folder
+later) are not checked, and the human-readable `audit.log` is a copy that nothing vouches for: read `audit.jsonl`.
+`rv-rsmf validate` re-checks the RSMF structure of the files; the re-hash proves they are the bytes the run wrote.
 
 ## Trusted timestamp (RFC 3161)
 
@@ -198,7 +234,7 @@ flowchart LR
 
 | 27037 principle / activity | How RV RSMF supports it |
 | --- | --- |
-| Auditability (5.3.2) | Every action logged with actor, UTC time and chain hash, including every conversion option and every output digest; `verify-log` checks the chain and its end against the timestamp and the case log |
+| Auditability (5.3.2) | Every action logged with actor, UTC time and chain hash, including every conversion option and every output digest; `verify-log` checks the chain and its end against the timestamp and the case log, and re-hashes every output the log records |
 | Repeatability (5.3.3) | Same export + options + version → byte-identical `.rsmf` files; `environment.json` records the exact tool and dependency versions |
 | Reproducibility (5.3.4) | Independent oracles: Python `email` + the official schema (`tests/oracle_rsmf.py`), Python chain verifier (`tests/verify_chain.py`); `trace.csv` lets anyone compare each event with the export by hand |
 | Justifiability (5.3.5) | Every finding states what it shows and what it does **not** prove; every examiner decision (time zone, date order, custodian, mapping) is recorded; limitations in every report |

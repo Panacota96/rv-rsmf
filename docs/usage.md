@@ -382,15 +382,42 @@ Check a signed report with Acrobat or `pyhanko sign validate --pretty-print --tr
 
 | Step | Command | Proves |
 | --- | --- | --- |
-| 1 | `rv-rsmf verify-log <log>` (0 intact, 3 broken or truncated) | No entry edited, deleted or reordered; the `truncation:` line names what anchors the end |
+| 1 | `rv-rsmf verify-log <log>` (0 intact, 3 broken, truncated or an output changed) | No entry edited, deleted or reordered; the `truncation:` line names what anchors the end; the `outputs:` line: every recorded output still has its digest |
 | 2 | `python tests/verify_chain.py <log>` (source tree) | Same, independent implementation; also re-hashes the input files listed in `hashes.csv` |
 | 3 | OpenSSL (above) | The TSA really signed that head at that time |
-| 4 | Script below | Every `.rsmf`, `trace.*`, `conversions.json`, report, `environment.json` and `hashes.csv` still has the digest the log recorded |
+| 4 | Step 1 (`outputs:` line); script below for an independent check | Every `.rsmf`, `trace.*`, `conversions.json`, report, `environment.json` and `hashes.csv` still has the digest the log recorded |
 | 5 | `rv-rsmf validate <rsmf folder>` | Every RSMF file is still valid |
-| 6 | `rv-rsmf verify-case <CASE> --rehash` | Case folder: the run is the one the case log announced; the reachable evidence matches the registry |
+| 6 | `rv-rsmf verify-case <CASE> --rehash` | Case folder: the run is the one the case log announced, with every recorded output unchanged; the reachable evidence matches the registry |
 | 7 | `python tests/validate_reports.py <reports folder or CASE>` | Every JSON report matches its schema |
 
-Step 4 (no built-in command yet, gap G19):
+On the sample run (`examples/sample/run.sh`, with a timestamp):
+
+```text
+OK  132 entries, chain intact: …\audit.jsonl
+    timestamp 2026-11-13T23:06:30Z by http://timestamp.digicert.com covers entry #129: TSA signature valid (…); chain not checked (…)
+    truncation: entries up to #129 are anchored by the RFC 3161 timestamp (timestamp-00129.json); 3 entries after it (…) cannot be proven complete
+    outputs: 333 verified of 334 recorded (md5, sha256), 1 skipped
+    not re-hashed: logs/timestamp-00129.tsr (RFC 3161 token: checked by the timestamp verification)
+```
+
+The `outputs:` line is the re-hash of every file the log says the run wrote (every `.rsmf` file, `trace.csv`,
+`trace.json`, `conversions.json`, each item's reports, the statistics reports, `hashes.csv`, `environment.json`),
+with every algorithm the log recorded; the latest entry for a file wins. A file edited, deleted or replaced after
+the run makes the run `BROKEN` (exit 3) and is named (one byte appended to an RSMF file, `trace.csv` moved away):
+
+```text
+BROKEN  …\audit.jsonl
+  - output rsmf/004-result-json-000010/Équipe-Atlas-24d44f/2026-03-03.rsmf: md5 differs from audit entry #73 (recorded eaaf…a4c7, now fdc2…a22a): edited or replaced after the run
+  - output rsmf/trace.csv: missing (recorded by audit entry #109): deleted or moved after the run
+    outputs: 331 verified of 334 recorded (md5, sha256), 1 missing, 1 changed, 1 skipped
+```
+
+A recorded path that is absolute, contains `..`, or resolves outside the run folder through a symlink or junction is
+rejected and never read. The timestamp token is listed as `not re-hashed` because the timestamp check already
+verifies it. Files the run did not record (anything added to the folder later) are not checked.
+
+Step 4 is built into `verify-log` and `verify-case`. To check it with code you can read in one screen (an
+independent implementation, e.g. for an opposing expert):
 
 ```bash
 python - "<log folder>" "<reports folder>" "<rsmf folder>" <<'EOF'
@@ -435,8 +462,8 @@ On the whole-sample run above (one language) it checks 201 files; appending one 
 | `convert` (alias `scan`) | done, no high finding | runtime error: input not found, output not writable, wrong certificate password, case log locked, rv-hashinv not found or failed, an attachment that cannot be read while writing | usage error or examiner decision: unknown option, time zone or algorithm, three algorithms, unknown language; `--timezone` / `--date-order` / CSV mapping needed; with `--case-dir`: another case's folder, `--case` missing at creation, unknown evidence id | done with ≥ 1 high finding (`PARSER_FAILED`, `RSMF_SCHEMA_INVALID`, `RSMF_ROUNDTRIP_MISMATCH`, `EVIDENCE_HASH_MISMATCH_WITH_CASE`, `UNREADABLE`, `EXECUTABLE_CONTENT`); or the case folder fails verification (nothing written) | cancelled, partial reports written |
 | `preview` | every export can be converted | an export cannot be read; no export found | a decision is needed | — | — |
 | `validate` | every file valid | a file could not be read (not an RSMF message, no `rsmf.zip`) | — | at least one invalid file | — |
-| `verify-log` | intact | log unreadable | — | broken chain, token mismatch, truncated | — |
-| `verify-case` | case intact (warnings printed) | not a case folder | — | a check failed | — |
+| `verify-log` | intact | log unreadable | — | broken chain, token mismatch, truncated, or a recorded output edited, deleted or replaced | — |
+| `verify-case` | case intact (warnings printed) | not a case folder | — | a check failed (e.g. a run's recorded output changed) | — |
 | `timestamp` | obtained and logged | TSA unreachable | — | log missing or broken (nothing added) | — |
 | `self-test` | all pass | a failure: do not use the build | — | — | — |
 | `describe` | description printed | — | usage error (unknown option) | — | — |
