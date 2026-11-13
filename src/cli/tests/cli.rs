@@ -251,6 +251,85 @@ fn bulk_scan_writes_reports_logs_and_verifiable_chain() {
         .stdout(predicate::str::contains("BROKEN"));
 }
 
+/// verify-log re-hashes every output a conversion run records: the reports, hashes.csv, environment.json, every
+/// .rsmf file (`rsmf_written`) and the traces (`trace_written`). An edited .rsmf file and a deleted trace fail
+/// (exit 3, both named); restored, the run verifies again.
+#[test]
+fn verify_log_rehashes_the_rsmf_files_and_traces_of_the_sample_run() {
+    let out = tempfile::tempdir().unwrap();
+    let evidence = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/sample/evidence");
+    bin()
+        .args(["convert", "--recursive", "--input"])
+        .arg(&evidence)
+        .args([
+            "--timezone",
+            "Europe/Paris",
+            "--date-order",
+            "dmy",
+            "--hash",
+            "sha256,md5",
+            "--progress",
+            "none",
+            "--out",
+        ])
+        .arg(out.path())
+        .assert()
+        .code(0);
+    let logs = only_dir(&out.path().join("logs"));
+    let rsmf = only_dir(&out.path().join("rsmf"));
+    let entries: Vec<serde_json::Value> = std::fs::read_to_string(logs.join("audit.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let recorded = |action: &str| -> Vec<String> {
+        entries
+            .iter()
+            .filter(|e| e["action"] == action)
+            .map(|e| e["item"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let rsmf_files = recorded("rsmf_written");
+    let traces = recorded("trace_written");
+    assert!(!rsmf_files.is_empty(), "no rsmf_written entry");
+    assert!(traces.contains(&"trace.csv".to_string()), "{traces:?}");
+
+    let ok = bin().arg("verify-log").arg(&logs).assert().code(0);
+    let text = String::from_utf8_lossy(&ok.get_output().stdout).into_owned();
+    let line = text
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("outputs: "))
+        .expect("outputs line");
+    let (verified, rest) = line.split_once(" verified of ").unwrap();
+    assert_eq!(rest, format!("{verified} recorded (md5, sha256)"), "{line}");
+    // Every .rsmf file and trace is re-hashed, not skipped, on top of the reports, register and environment.
+    assert!(
+        verified.parse::<usize>().unwrap() > rsmf_files.len() + traces.len() + 2,
+        "{line}"
+    );
+    assert!(!text.contains("not re-hashed"), "{text}");
+
+    let edited = rsmf.join(&rsmf_files[0]);
+    let saved = std::fs::read(&edited).unwrap();
+    let mut changed = saved.clone();
+    changed.push(0);
+    std::fs::write(&edited, changed).unwrap();
+    let trace = rsmf.join("trace.csv");
+    let moved = out.path().join("moved.csv");
+    std::fs::rename(&trace, &moved).unwrap();
+    bin().arg("verify-log").arg(&logs).assert().code(3).stdout(
+        predicate::str::contains(format!(
+            "output rsmf/{}: md5 differs from audit entry #",
+            rsmf_files[0]
+        ))
+        .and(predicate::str::contains("output rsmf/trace.csv: missing"))
+        .and(predicate::str::contains("1 missing, 1 changed")),
+    );
+    std::fs::write(&edited, saved).unwrap();
+    std::fs::rename(&moved, &trace).unwrap();
+    bin().arg("verify-log").arg(&logs).assert().code(0);
+}
+
 #[test]
 fn jsonl_progress_is_one_event_per_line_with_elapsed_time() {
     let out = tempfile::tempdir().unwrap();
@@ -760,15 +839,24 @@ fn case_folder_intake_verify_case_and_tampering() {
         .collect();
     assert!(custody_ids.iter().any(|c| c.contains("E0001")));
     let runs_before = if intake { 1 } else { 2 };
+    bin().arg("verify-case").arg(&case).assert().code(0).stdout(
+        predicate::str::contains(format!("3 registered items, {} runs verified", runs_before)).and(
+            predicate::str::is_match(r"outputs: [1-9]\d* verified of [1-9]\d* recorded").unwrap(),
+        ),
+    );
+    // verify-case re-hashes every run's recorded outputs: an edited report is named, exit 3.
+    let stats = run_dir.join("reports/statistics.json");
+    let saved = std::fs::read(&stats).unwrap();
+    std::fs::write(&stats, b"{}\n").unwrap();
     bin()
         .arg("verify-case")
         .arg(&case)
         .assert()
-        .code(0)
-        .stdout(predicate::str::contains(format!(
-            "3 registered items, {} runs verified",
-            runs_before
-        )));
+        .code(3)
+        .stdout(predicate::str::contains(
+            "output reports/statistics.json: md5 differs from audit entry #",
+        ));
+    std::fs::write(&stats, saved).unwrap();
     // The case id may be left out once the case exists; --evidence selects registered items.
     case_scan(&case)
         .args(["--evidence", "E0002"])
