@@ -547,7 +547,8 @@ while documenting this tool's code at this commit; each row states what remains.
    your own mapping was checked against the source tool on a sample of messages, and the mapping file is kept.
 10. **The run is complete**: the audit log ends with `run_finished` (not `run_failed` / `run_cancelled`), and
     `rv-rsmf verify-log <log folder>` prints `OK` with its `outputs:` line (every `.rsmf` file, trace and report
-    re-hashed against the audited digests); `python tests/verify_chain.py <log folder>` exits 0.
+    re-hashed against the audited digests); `python tests/verify_chain.py <log folder>` exits 0
+    (it also re-hashes every output the audit log records).
 11. **Every RSMF file is valid**: no `RSMF_SCHEMA_INVALID`, `RSMF_ROUNDTRIP_MISMATCH` or `PARSER_FAILED` left
     unexplained; `rv-rsmf validate` on the delivered copy prints `OK` for every file; outputs match the audited
     digests ([usage.md](usage.md#timestamps-signing-and-verifying-a-run), step 4).

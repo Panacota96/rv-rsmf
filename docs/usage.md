@@ -383,7 +383,7 @@ Check a signed report with Acrobat or `pyhanko sign validate --pretty-print --tr
 | Step | Command | Proves |
 | --- | --- | --- |
 | 1 | `rv-rsmf verify-log <log>` (0 intact, 3 broken, truncated or an output changed) | No entry edited, deleted or reordered; the `truncation:` line names what anchors the end; the `outputs:` line: every recorded output still has its digest |
-| 2 | `python tests/verify_chain.py <log>` (source tree) | Same, independent implementation; also re-hashes the input files listed in `hashes.csv` |
+| 2 | `python tests/verify_chain.py <log>` (source tree) | Same, independent implementation; also re-hashes the input files listed in `hashes.csv` and every output the audit log records |
 | 3 | OpenSSL (above) | The TSA really signed that head at that time |
 | 4 | Step 1 (`outputs:` line); script below for an independent check | Every `.rsmf`, `trace.*`, `conversions.json`, report, `environment.json` and `hashes.csv` still has the digest the log recorded |
 | 5 | `rv-rsmf validate <rsmf folder>` | Every RSMF file is still valid |

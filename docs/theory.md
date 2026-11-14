@@ -892,7 +892,8 @@ External anchors, used automatically by `verify-log` ([verify.rs](../src/core/sr
 
 A log that ends before `#K` or `#M` is reported as truncated (exit 3). Independent check:
 [tests/verify_chain.py](../tests/verify_chain.py) re-implements the chain in Python (standard library) and
-re-hashes the files listed in `hashes.csv`. The log file is opened with `create_new` + `append`; only the
+re-hashes the files listed in `hashes.csv` and every output the audit log records. The log file is opened with
+`create_new` + `append`; only the
 `timestamp` command re-opens a log, after verifying it.
 
 ## B15 The case folder
