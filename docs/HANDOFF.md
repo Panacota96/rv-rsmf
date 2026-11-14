@@ -37,7 +37,10 @@ flowchart LR
 
 **Shared code.** `src/core/src/trust.rs` is byte-identical in rv-hub, rv-hashinv, rv-rsmf, rv-certcheck, rv-imgauth,
 rv-pdfauth and the forge template. Change it in all of them in one go (and `core/trust.py` of the forge's Python
-template, graded by the same fixtures). The installer AppId table in `src/cli/tests/packaging.rs` lists every
+template, graded by the same fixtures). `src/core/src/outputs.rs` (re-hash of the outputs an audit log records, used by
+`verify-log` and `verify-case`) is shared the same way, byte-identical with rv-hashinv: it depends only on
+`crate::hash` and `serde_json`; its module documentation lists every audit shape of every tool (here `rsmf_written`
+and `trace_written`, files under `rsmf/`). The installer AppId table in `src/cli/tests/packaging.rs` lists every
 tool; a new tool's AppId goes into every repository's copy.
 
 ## 3. Everyday commands
@@ -80,6 +83,9 @@ variables or prompts and never logged; no GPL/AGPL/LGPL components; tools report
 
 - The licence (`LICENSE`) and the admissibility analysis (`docs/admissibility.md`) are drafts pending a lawyer's review (Colombia and France).
 - Revocation of the TSA certificate is never checked by the tools (gap G18): it is established separately from CRL/OCSP evidence covering genTime ([ADR 0002](adr/0002-tsa-token-verification.md)).
+- Recorded outputs (gap G19, closed): `verify-log` and `verify-case` re-hash every `.rsmf` file, trace, report,
+  `hashes.csv` and `environment.json` the audit log records (`src/core/src/outputs.rs`). The Python oracle
+  `tests/verify_chain.py` does not re-hash them; the script in [usage.md](usage.md) does.
 - RUSTSEC-2023-0071 is a documented exception until a stable `cms` 0.3 (rsa 0.10) exists ([ADR 0003](adr/0003-dependency-advisories.md)).
 
 The gap table in [admissibility.md](admissibility.md) lists every known limitation with its owner (engineering,
