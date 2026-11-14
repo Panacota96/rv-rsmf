@@ -207,8 +207,8 @@ flowchart TB
    `run <RUN-ID>: output rsmf/…` (or `reports/…`); the line `outputs: N verified of M recorded by the runs' audit
    logs` counts them. `--rehash` also re-reads every registered file still reachable and compares it with the
    registry.
-2. Independently: `python tests/verify_chain.py <CASE>/runs/rv-rsmf/<RUN-ID>/logs`; `sha256sum
-   evidence/registry.json` must equal the last `registry_sha256` in `case-log.jsonl`.
+2. Independently: `python tests/verify_chain.py <CASE>/runs/rv-rsmf/<RUN-ID>/logs` (chain, hash register and every
+   output the audit log records); `sha256sum evidence/registry.json` must equal the last `registry_sha256` in `case-log.jsonl`.
 3. `rv-rsmf validate <CASE>/runs/rv-rsmf/<RUN-ID>/rsmf` re-checks every RSMF file; compare their SHA-256 with the
    `rsmf_written` entries ([usage.md](usage.md#timestamps-signing-and-verifying-a-run)).
 4. `python tests/validate_reports.py <CASE>` validates `case.json`, `registry.json` and every JSON report.

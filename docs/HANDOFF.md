@@ -85,7 +85,8 @@ variables or prompts and never logged; no GPL/AGPL/LGPL components; tools report
 - Revocation of the TSA certificate is never checked by the tools (gap G18): it is established separately from CRL/OCSP evidence covering genTime ([ADR 0002](adr/0002-tsa-token-verification.md)).
 - Recorded outputs (gap G19, closed): `verify-log` and `verify-case` re-hash every `.rsmf` file, trace, report,
   `hashes.csv` and `environment.json` the audit log records (`src/core/src/outputs.rs`). The Python oracle
-  `tests/verify_chain.py` does not re-hash them; the script in [usage.md](usage.md) does.
+  `tests/verify_chain.py` re-hashes them too (same rules, written independently), as does the script in
+  [usage.md](usage.md).
 - RUSTSEC-2023-0071 is a documented exception until a stable `cms` 0.3 (rsa 0.10) exists ([ADR 0003](adr/0003-dependency-advisories.md)).
 
 The gap table in [admissibility.md](admissibility.md) lists every known limitation with its owner (engineering,
