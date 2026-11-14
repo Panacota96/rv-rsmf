@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please and reviewed by a human.
 
+## [0.3.2](https://github.com/Panacota96/rv-rsmf/compare/v0.3.1...v0.3.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* **cli:** verify-log and verify-case print the outputs line and document the re-hash ([2e5c115](https://github.com/Panacota96/rv-rsmf/commit/2e5c1157f61afdecf7e3b0f7af6ebe0691cc3dd2))
+* **core:** late audit entries and redirected run folders cannot hide an edited output ([2869a0e](https://github.com/Panacota96/rv-rsmf/commit/2869a0e0a816887da420492df1b723fec7e6e665))
+* **core:** re-hash the outputs a run's audit log records in verify-log and verify-case ([f6d4d5a](https://github.com/Panacota96/rv-rsmf/commit/f6d4d5ab4bf9c5768918d47ced78c7a24cd86a4a))
+* verify-log and verify-case re-hash the outputs the audit log records ([7c07eb3](https://github.com/Panacota96/rv-rsmf/commit/7c07eb3615d0ab29f9d14491e822c95e93f2d011))
+
 ## [0.3.1](https://github.com/Panacota96/rv-rsmf/compare/v0.3.0...v0.3.1) (2026-11-10)
 
 
