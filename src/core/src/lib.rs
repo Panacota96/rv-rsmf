@@ -42,3 +42,6 @@ pub const TOOL_VERSION: &str = env!("RV_VERSION");
 /// This tool's place in a shared case folder (see docs/case-folder.md): rv-rsmf is an ANALYSIS tool — it verifies
 /// every item against the registry written by the intake tool, rv-hashinv. Keep equal to `case_role` in .forge.json.
 pub const CASE_ROLE: CaseRole = CaseRole::Analysis;
+
+#[cfg(test)]
+mod golden;

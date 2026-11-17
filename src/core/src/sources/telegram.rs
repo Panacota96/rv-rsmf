@@ -299,7 +299,7 @@ fn extra_lines(m: &Value) -> Vec<String> {
     out
 }
 
-fn epoch(v: &Value) -> Option<DateTime<Utc>> {
+pub(crate) fn epoch(v: &Value) -> Option<DateTime<Utc>> {
     scalar(v)?
         .trim()
         .parse::<i64>()
@@ -307,7 +307,7 @@ fn epoch(v: &Value) -> Option<DateTime<Utc>> {
         .and_then(|n| Utc.timestamp_opt(n, 0).single())
 }
 
-fn local(v: &Value) -> Option<NaiveDateTime> {
+pub(crate) fn local(v: &Value) -> Option<NaiveDateTime> {
     NaiveDateTime::parse_from_str(v.as_str()?, "%Y-%m-%dT%H:%M:%S").ok()
 }
 

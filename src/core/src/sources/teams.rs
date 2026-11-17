@@ -142,6 +142,15 @@ pub fn filetime_to_utc(ft: u64) -> Option<DateTime<Utc>> {
     DateTime::from_timestamp(secs, nanos)
 }
 
+/// The source text of a FILETIME as kept in custom `source_time`: "2026-03-02T09:15:00.0000000Z = FILETIME n (prop)".
+pub(crate) fn source_time(raw: u64, t: &DateTime<Utc>, prop: &str) -> String {
+    format!(
+        "{}.{:07}Z = FILETIME {raw} ({prop})",
+        t.format("%Y-%m-%dT%H:%M:%S"),
+        t.timestamp_subsec_nanos() / 100
+    )
+}
+
 /// UTC → FILETIME (used by tests and the sample generator).
 pub fn utc_to_filetime(t: DateTime<Utc>) -> u64 {
     ((t.timestamp() + 11_644_473_600) as u64) * 10_000_000
@@ -607,11 +616,7 @@ pub fn parse(export: &ExportInput, _opts: &ParseOptions) -> Result<ParsedExport,
         e.participant = sender;
         if let Some((raw, t, prop)) = &m.time {
             e.timestamp = Some(*t);
-            e.source_time = format!(
-                "{}.{:07}Z = FILETIME {raw} ({prop})",
-                t.format("%Y-%m-%dT%H:%M:%S"),
-                t.timestamp_subsec_nanos() / 100
-            );
+            e.source_time = source_time(*raw, t, prop);
         }
         e.body = m.body.clone();
         e.attachments = m.attachments.clone();

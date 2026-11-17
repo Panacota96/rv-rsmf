@@ -431,13 +431,13 @@ impl AutoTs {
 /// A time cell after the first look: an instant, a wall-clock time still needing a zone, or a numeric date
 /// still needing the day/month order.
 #[derive(Clone, Debug, PartialEq)]
-enum Cell {
+pub(crate) enum Cell {
     Instant(DateTime<Utc>),
     Local(NaiveDateTime),
     Auto(AutoTs),
 }
 
-fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
+pub(crate) fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
     let s = s.trim();
     if s.is_empty() {
         return Err("empty time".into());
@@ -494,20 +494,20 @@ fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Zone {
+pub(crate) enum Zone {
     Iana(Tz),
     Fixed(FixedOffset),
 }
 
 impl Zone {
-    fn parse(s: &str) -> Option<Zone> {
+    pub(crate) fn parse(s: &str) -> Option<Zone> {
         let s = s.trim();
         Tz::from_str(s)
             .ok()
             .map(Zone::Iana)
             .or_else(|| parse_offset(s).map(Zone::Fixed))
     }
-    fn name(&self) -> String {
+    pub(crate) fn name(&self) -> String {
         match self {
             Zone::Iana(t) => t.name().to_string(),
             Zone::Fixed(o) => format!("UTC{o}"),
