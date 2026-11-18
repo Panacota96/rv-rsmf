@@ -220,7 +220,7 @@ fn zone_names(out: &mut Vec<String>) {
 fn transition_probes(name: &str) -> (Vec<(i64, String)>, Vec<i64>) {
     let mut locals = vec![];
     let mut instants = vec![];
-    let Ok(tz) = jiff::tz::TimeZone::get(name) else {
+    let Ok(tz) = jiff::tz::TimeZoneDatabase::bundled().get(name) else {
         return (locals, instants);
     };
     for y in TRANSITION_YEARS {

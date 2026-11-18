@@ -36,6 +36,8 @@ impl ConvertOptions {
         json!({
             "source": self.parse.source.map(|s| s.name()),
             "timezone": self.parse.timezone.as_ref().map(|t| t.name().to_string()),
+            // IANA time zone database release used for --timezone and zone columns (bundled, every platform).
+            "tzdb": jiff_tzdb::VERSION,
             "date_order": self.parse.date_order.map(|d| d.name()),
             "csv_map": self.parse.csv_map.as_ref().map(|p| p.display().to_string()),
             "csv_profile": self.parse.csv_profile.name(),

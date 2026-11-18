@@ -60,7 +60,9 @@ impl std::error::Error for UnknownZone {}
 impl FromStr for Tz {
     type Err = UnknownZone;
     fn from_str(name: &str) -> Result<Tz, UnknownZone> {
-        let tz = jiff::tz::TimeZone::get(name).map_err(|_| UnknownZone)?;
+        let tz = jiff::tz::TimeZoneDatabase::bundled()
+            .get(name)
+            .map_err(|_| UnknownZone)?;
         // jiff matches names case-insensitively; chrono-tz did not, and had no `Factory` zone.
         if tz.iana_name() != Some(name) || name == "Factory" {
             return Err(UnknownZone);
