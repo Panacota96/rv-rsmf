@@ -5,7 +5,7 @@
 //! offsets, zone columns) and the RSMF bytes written for every sample export.
 //!
 //! Regenerate (only when a behaviour change is intended):
-//! `cargo test -p rv-rsmf-core golden::print -- --ignored --nocapture > src/core/src/golden/expected.txt`
+//! `cargo test -p rv-rsmf-core golden::tests::print -- --ignored --nocapture > src/core/src/golden/expected.txt`
 //! (then drop cargo's own lines). Only the adapters below may depend on the date library.
 
 use crate::model::{Event, ParsedExport, SourceKind, SourceLoc};
@@ -1054,28 +1054,33 @@ fn all_cases() -> Vec<String> {
     out
 }
 
-#[test]
-fn golden_dates_and_times() {
-    let got = all_cases();
-    let want: Vec<&str> = include_str!("expected.txt").lines().collect();
-    let mut diffs = 0;
-    for (i, (g, w)) in got.iter().zip(&want).enumerate() {
-        if g != w {
-            diffs += 1;
-            if diffs <= 20 {
-                eprintln!("line {}:\n  want {w}\n  got  {g}", i + 1);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn golden_dates_and_times() {
+        let got = all_cases();
+        let want: Vec<&str> = include_str!("expected.txt").lines().collect();
+        let mut diffs = 0;
+        for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+            if g != w {
+                diffs += 1;
+                if diffs <= 20 {
+                    eprintln!("line {}:\n  want {w}\n  got  {g}", i + 1);
+                }
             }
         }
+        assert_eq!(got.len(), want.len(), "number of golden lines");
+        assert_eq!(diffs, 0, "{diffs} golden lines differ");
     }
-    assert_eq!(got.len(), want.len(), "number of golden lines");
-    assert_eq!(diffs, 0, "{diffs} golden lines differ");
-}
 
-/// Prints the golden lines (see the module documentation).
-#[test]
-#[ignore]
-fn print() {
-    for l in all_cases() {
-        println!("{l}");
+    /// Prints the golden lines (see the module documentation).
+    #[test]
+    #[ignore]
+    fn print() {
+        for l in all_cases() {
+            println!("{l}");
+        }
     }
 }
