@@ -397,7 +397,7 @@ impl GuiState {
     pub fn set_timezone(&mut self, tz: &str) -> Result<(), String> {
         let tz = tz.trim().to_string();
         if !tz.is_empty() {
-            // The target type (chrono_tz::Tz) is taken from the ParseOptions field.
+            // The target type (zone::Tz) is taken from the ParseOptions field.
             let probe = ParseOptions {
                 timezone: tz.parse().ok(),
                 ..Default::default()
@@ -1596,7 +1596,7 @@ mod tests {
             rv_rsmf_core::model::Event::message("e-1".into(), "c".into(), Default::default());
         ev.participant = Some("p-1".into());
         ev.source_time = "01/02/2024, 10:15".into();
-        ev.timestamp = Some("2024-02-01T09:15:00Z".parse().unwrap());
+        ev.timestamp = Some(rv_rsmf_core::strftime::parse_rfc3339("2024-02-01T09:15:00Z").unwrap());
         ev.body = "x".repeat(300);
         p.events.push(ev);
         p.facts.insert("date_order".into(), "dmy".into());
@@ -1643,7 +1643,7 @@ mod tests {
         let o = &cfg.convert;
         assert_eq!(o.parse.source, Some(SourceKind::Csv));
         assert_eq!(
-            o.parse.timezone.map(|t| t.name()),
+            o.parse.timezone.as_ref().map(|t| t.name()),
             Some("America/Mexico_City")
         );
         assert_eq!(o.parse.date_order, Some(DateOrder::Ymd));

@@ -13,13 +13,13 @@
 
 use super::{ExportInput, ParseError, ParseOptions};
 use crate::analyzer::{Finding, Severity};
+use crate::datetime::{NaiveDateTime, UtcTime};
 use crate::model::{
     Attachment, AttachmentData, Conversation, ConversationType, Direction, Event, EventType,
     ParsedExport, Participant, Reaction, SourceLoc, stable_id,
 };
 use crate::report::capped_list;
 use crate::rsmf::{local_to_utc, rsmf_time};
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Component, Path};
@@ -299,16 +299,16 @@ fn extra_lines(m: &Value) -> Vec<String> {
     out
 }
 
-pub(crate) fn epoch(v: &Value) -> Option<DateTime<Utc>> {
+pub(crate) fn epoch(v: &Value) -> Option<UtcTime> {
     scalar(v)?
         .trim()
         .parse::<i64>()
         .ok()
-        .and_then(|n| Utc.timestamp_opt(n, 0).single())
+        .and_then(|n| UtcTime::from_timestamp(n, 0))
 }
 
 pub(crate) fn local(v: &Value) -> Option<NaiveDateTime> {
-    NaiveDateTime::parse_from_str(v.as_str()?, "%Y-%m-%dT%H:%M:%S").ok()
+    crate::strftime::parse_naive_datetime(v.as_str()?, "%Y-%m-%dT%H:%M:%S").ok()
 }
 
 pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, ParseError> {
@@ -360,9 +360,9 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
         .filter(|m| epoch(&m["date_unixtime"]).is_none() && local(&m["date"]).is_some())
         .count();
     let tz = if local_only > 0 {
-        Some(opts.timezone.ok_or(ParseError::NeedsTimezone)?)
+        Some(opts.timezone.clone().ok_or(ParseError::NeedsTimezone)?)
     } else {
-        opts.timezone
+        opts.timezone.clone()
     };
 
     let owner = scalar(&root["personal_information"]["user_id"]).map(|u| format!("user{u}"));
@@ -416,7 +416,7 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
                 .unwrap_or_default();
             if let Some(t) = epoch(&m["date_unixtime"]) {
                 e.timestamp = Some(t);
-            } else if let (Some(l), Some(tz)) = (local(&m["date"]), tz) {
+            } else if let (Some(l), Some(tz)) = (local(&m["date"]), tz.as_ref()) {
                 let (t, problem) = local_to_utc(l, tz);
                 e.timestamp = Some(t);
                 if let Some(p) = problem {
@@ -426,7 +426,7 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
             }
             if let Some(t) = epoch(&m["edited_unixtime"]).or_else(|| {
                 local(&m["edited"])
-                    .zip(tz)
+                    .zip(tz.as_ref())
                     .map(|(l, tz)| local_to_utc(l, tz).0)
             }) {
                 tally.edited += 1;
@@ -605,7 +605,7 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
                 .with("count", tally.edited.to_string()),
         );
     }
-    if let (false, Some(tz)) = (tally.dst.is_empty(), tz) {
+    if let (false, Some(tz)) = (tally.dst.is_empty(), tz.as_ref()) {
         out.findings.push(
             Finding::new("DST_AMBIGUOUS_OR_MISSING_TIME", Severity::Medium)
                 .with("count", tally.dst.len().to_string())
@@ -624,7 +624,7 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
         } else {
             format!(
                 "{local_only} message(s) without date_unixtime read as local time in {}",
-                tz.map(|t| t.name()).unwrap_or("?")
+                tz.as_ref().map(|t| t.name()).unwrap_or("?")
             )
         },
     );

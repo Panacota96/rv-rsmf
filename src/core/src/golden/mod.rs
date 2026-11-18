@@ -8,8 +8,6 @@
 //! `cargo test -p rv-rsmf-core golden::print -- --ignored --nocapture > src/core/src/golden/expected.txt`
 //! (then drop cargo's own lines). Only the adapters below may depend on the date library.
 
-#![allow(clippy::clone_on_copy)]
-
 use crate::model::{Event, ParsedExport, SourceKind, SourceLoc};
 use crate::rsmf::{self, WriteOptions, local_to_utc, rsmf_time};
 use crate::sources::{
@@ -21,9 +19,9 @@ use std::path::{Path, PathBuf};
 
 // ------------------------------------------------------------------ adapters (date library specific)
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Timelike, Utc};
-type Zone = chrono_tz::Tz;
-type Instant = DateTime<Utc>;
+use crate::datetime::{NaiveDate, NaiveDateTime, UtcTime};
+type Zone = crate::zone::Tz;
+type Instant = UtcTime;
 type Local = NaiveDateTime;
 
 fn zone(s: &str) -> Option<Zone> {
@@ -33,7 +31,7 @@ fn zone_name(z: &Zone) -> String {
     z.name().to_string()
 }
 fn instant(secs: i64, nanos: u32) -> Option<Instant> {
-    DateTime::from_timestamp(secs, nanos)
+    UtcTime::from_timestamp(secs, nanos)
 }
 fn local(y: i32, mo: u32, d: u32, h: u32, mi: u32, s: u32) -> Option<Local> {
     NaiveDate::from_ymd_opt(y, mo, d)?.and_hms_opt(h, mi, s)
@@ -52,11 +50,11 @@ fn show_local(n: &Local) -> String {
 }
 /// Local calendar day and hour of `t` in `z` (what slicing uses).
 fn local_day_hour(t: &Instant, z: &Zone) -> String {
-    let l = t.with_timezone(z);
-    format!("{} h{:02}", l.date_naive().format("%Y-%m-%d"), l.hour())
+    let l = z.to_local(t);
+    format!("{} h{:02}", l.date().ymd(), l.hour())
 }
 fn utc_of(t: &Local, z: &Zone) -> (Instant, Option<&'static str>) {
-    local_to_utc(*t, *z)
+    local_to_utc(*t, z)
 }
 fn offset_secs(o: &csvmap::AutoTs) -> String {
     o.offset
@@ -967,7 +965,7 @@ fn slicing(out: &mut Vec<String>) {
             e.timestamp = instant(*s, *n);
             p.events.push(e);
         }
-        let slices = rsmf::slice(&p, tz);
+        let slices = rsmf::slice(&p, &tz);
         let stems: Vec<String> = slices
             .iter()
             .map(|s| format!("{}:{:?}", s.file_stem(), s.events))
@@ -1014,7 +1012,7 @@ fn samples(out: &mut Vec<String>) {
                 collection_seed: "GOLDEN".into(),
             };
             let d = tempfile::tempdir().unwrap();
-            for s in rsmf::slice(&p, tz.clone()) {
+            for s in rsmf::slice(&p, &tz) {
                 let (w, bytes) = rsmf::write_slice(&p, &s, &wo, d.path()).unwrap();
                 push(
                     out,

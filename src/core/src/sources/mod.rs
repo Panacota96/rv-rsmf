@@ -81,7 +81,7 @@ pub struct ParseOptions {
     /// Forced source type; None = detect.
     pub source: Option<SourceKind>,
     /// IANA zone for sources whose times have no offset (WhatsApp, CSV). Required for them.
-    pub timezone: Option<chrono_tz::Tz>,
+    pub timezone: Option<crate::zone::Tz>,
     /// Required when a WhatsApp/CSV file is ambiguous (every day and month ≤ 12).
     pub date_order: Option<DateOrder>,
     /// CSV: mapping file (TOML) overriding the profile.

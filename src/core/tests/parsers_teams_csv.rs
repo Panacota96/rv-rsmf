@@ -10,6 +10,7 @@ mod samples;
 use rv_rsmf_core::model::SourceKind;
 use rv_rsmf_core::rsmf::{self, WriteOptions};
 use rv_rsmf_core::sources::{self, CsvProfile, ExportInput, ParseError, ParseOptions};
+use rv_rsmf_core::zone::Tz;
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -29,12 +30,12 @@ fn files_under(dir: &Path) -> Vec<PathBuf> {
 
 fn write_all(
     p: &rv_rsmf_core::model::ParsedExport,
-    tz: chrono_tz::Tz,
+    tz: &Tz,
     kind: SourceKind,
     dir: &Path,
 ) -> Vec<(rsmf::WrittenSlice, Vec<u8>)> {
     let o = WriteOptions {
-        tz,
+        tz: tz.clone(),
         custodian: None,
         platform: rsmf::platform_for(kind, None),
         generator: "rv-rsmf test".into(),
@@ -89,11 +90,11 @@ fn samples_convert_to_valid_rsmf_matching_expected() {
         assert_eq!(export.kind, kind, "{name}");
         let p = sources::parse(&export, &opts).unwrap_or_else(|e| panic!("{name}: {e}"));
 
-        let tz = opts.timezone.unwrap_or(chrono_tz::UTC);
+        let tz = opts.timezone.clone().unwrap_or_else(Tz::utc);
         let d1 = tempfile::tempdir().unwrap();
         let d2 = tempfile::tempdir().unwrap();
-        let w1 = write_all(&p, tz, kind, d1.path());
-        let w2 = write_all(&p, tz, kind, d2.path());
+        let w1 = write_all(&p, &tz, kind, d1.path());
+        let w2 = write_all(&p, &tz, kind, d2.path());
         assert!(!w1.is_empty(), "{name}: nothing written");
         let (mut packed, mut missing) = (0, 0);
         for ((ws, b1), (_, b2)) in w1.iter().zip(&w2) {
@@ -253,7 +254,7 @@ fn csv_without_timezone_or_mapping_stops() {
     // The xry-like header has none of the generic profile's column names: the built-in tool profile whose
     // columns match is detected, and still reported as a draft.
     let generic_profile = ParseOptions {
-        timezone: Some(chrono_tz::America::Bogota),
+        timezone: Some("America/Bogota".parse().unwrap()),
         ..Default::default()
     };
     let p = sources::parse(xry, &generic_profile).unwrap();
@@ -265,7 +266,7 @@ fn csv_without_timezone_or_mapping_stops() {
     );
     // A forced mapping that does not fit is never replaced by a guess.
     let map = ParseOptions {
-        timezone: Some(chrono_tz::America::Bogota),
+        timezone: Some("America/Bogota".parse().unwrap()),
         csv_map: Some(generic.primary.with_file_name("generic.map.toml")),
         ..Default::default()
     };
@@ -276,7 +277,7 @@ fn csv_without_timezone_or_mapping_stops() {
     let p = sources::parse(
         generic,
         &ParseOptions {
-            timezone: Some(chrono_tz::Europe::Madrid),
+            timezone: Some("Europe/Madrid".parse().unwrap()),
             ..Default::default()
         },
     )

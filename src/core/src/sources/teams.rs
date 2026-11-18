@@ -22,11 +22,11 @@
 
 use super::{ExportInput, ParseError, ParseOptions};
 use crate::analyzer::{Finding, Severity};
+use crate::datetime::UtcTime;
 use crate::model::{
     Attachment, AttachmentData, Conversation, ConversationType, Event, EventType, ParsedExport,
     Participant, SourceLoc, stable_id,
 };
-use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -92,7 +92,7 @@ impl Props {
             _ => None,
         }
     }
-    pub fn time(&self, id: u16) -> Option<(u64, DateTime<Utc>)> {
+    pub fn time(&self, id: u16) -> Option<(u64, UtcTime)> {
         match self.fixed.get(&id) {
             Some((PT_SYSTIME, v)) => filetime_to_utc(*v).map(|t| (*v, t)),
             _ => None,
@@ -132,27 +132,27 @@ pub fn parse_fixed_props(stream: &[u8], header: usize) -> HashMap<u16, (u16, u64
 }
 
 /// FILETIME (100-ns intervals since 1601-01-01 UTC) → UTC. 0 and out-of-range values → None.
-pub fn filetime_to_utc(ft: u64) -> Option<DateTime<Utc>> {
+pub fn filetime_to_utc(ft: u64) -> Option<UtcTime> {
     if ft == 0 || ft == u64::MAX {
         return None;
     }
     const EPOCH_DIFF_SECS: i64 = 11_644_473_600;
     let secs = (ft / 10_000_000) as i64 - EPOCH_DIFF_SECS;
     let nanos = ((ft % 10_000_000) * 100) as u32;
-    DateTime::from_timestamp(secs, nanos)
+    UtcTime::from_timestamp(secs, nanos)
 }
 
 /// The source text of a FILETIME as kept in custom `source_time`: "2026-03-02T09:15:00.0000000Z = FILETIME n (prop)".
-pub(crate) fn source_time(raw: u64, t: &DateTime<Utc>, prop: &str) -> String {
+pub(crate) fn source_time(raw: u64, t: &UtcTime, prop: &str) -> String {
     format!(
         "{}.{:07}Z = FILETIME {raw} ({prop})",
-        t.format("%Y-%m-%dT%H:%M:%S"),
+        t.ymd_t_hms(),
         t.timestamp_subsec_nanos() / 100
     )
 }
 
 /// UTC → FILETIME (used by tests and the sample generator).
-pub fn utc_to_filetime(t: DateTime<Utc>) -> u64 {
+pub fn utc_to_filetime(t: UtcTime) -> u64 {
     ((t.timestamp() + 11_644_473_600) as u64) * 10_000_000
         + (t.timestamp_subsec_nanos() / 100) as u64
 }
@@ -347,7 +347,7 @@ struct RawMsg {
     recipients: Vec<(String, Option<String>)>,
     body: String,
     body_source: &'static str,
-    time: Option<(u64, DateTime<Utc>, &'static str)>,
+    time: Option<(u64, UtcTime, &'static str)>,
     message_id: Option<String>,
     in_reply_to: Option<String>,
     attachments: Vec<Attachment>,
@@ -703,7 +703,6 @@ pub fn parse(export: &ExportInput, _opts: &ParseOptions) -> Result<ParsedExport,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
 
     #[test]
     fn stream_names_decode_to_id_and_type() {
@@ -727,7 +726,7 @@ mod tests {
     #[test]
     fn filetime_round_trips_with_100ns_precision() {
         // 2026-03-02T09:15:00Z
-        let t = Utc.with_ymd_and_hms(2026, 3, 2, 9, 15, 0).unwrap();
+        let t = UtcTime::from_ymd_hms(2026, 3, 2, 9, 15, 0).unwrap();
         let ft = utc_to_filetime(t);
         assert_eq!(ft, 134_169_165_000_000_000);
         assert_eq!(filetime_to_utc(ft), Some(t));
@@ -737,7 +736,7 @@ mod tests {
         // Unix epoch.
         assert_eq!(
             filetime_to_utc(116_444_736_000_000_000),
-            Some(Utc.timestamp_opt(0, 0).unwrap())
+            UtcTime::from_timestamp(0, 0)
         );
     }
 
@@ -765,7 +764,7 @@ mod tests {
         assert_eq!(p.long(PR_INTERNET_CPID), Some(65001));
         assert_eq!(
             p.time(PR_CLIENT_SUBMIT_TIME).unwrap().1,
-            Utc.with_ymd_and_hms(2026, 3, 2, 9, 15, 0).unwrap()
+            UtcTime::from_ymd_hms(2026, 3, 2, 9, 15, 0).unwrap()
         );
         assert!(!p.fixed.contains_key(&PR_SUBJECT));
         // Truncated stream: no panic, nothing read.

@@ -23,7 +23,6 @@ digest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 minijinja.workspace = true
-chrono.workspace = true
 jiff.workspace = true
 walkdir.workspace = true
 ureq.workspace = true
@@ -38,7 +37,6 @@ rsa.workspace = true
 # `oid`: RSA PKCS#1 v1.5 verification of TSA tokens needs the digest OIDs.
 sha2-legacy = { workspace = true, features = ["oid"] }
 zip.workspace = true
-chrono-tz.workspace = true
 jsonschema.workspace = true
 cfb.workspace = true
 csv.workspace = true
