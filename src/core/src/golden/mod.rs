@@ -974,6 +974,33 @@ fn slicing(out: &mut Vec<String>) {
     }
 }
 
+/// SHA-256 of an RSMF file's content, independent of the platform that wrote it: the e-mail headers (with the
+/// MIME boundary, which is derived from the zip's own hash, masked), the text body, the manifest and the SHA-256
+/// of every zip entry. The zip container itself is not hashed: the zip crate writes the host system into its
+/// "version made by" field (DOS on Windows, Unix elsewhere), so the same RSMF differs in those bytes by platform.
+fn content_digest(path: &std::path::Path, bytes: &[u8]) -> String {
+    let f = rsmf::read_rsmf(path)
+        .unwrap_or_else(|e| panic!("{}: {e} ({} bytes)", path.display(), bytes.len()));
+    let headers: Vec<(String, String)> = f
+        .headers
+        .iter()
+        .map(|(k, v)| {
+            let v = match v.find("boundary=") {
+                Some(i) if k == "content-type" => format!("{}boundary=<masked>", &v[..i]),
+                _ => v.clone(),
+            };
+            (k.clone(), v)
+        })
+        .collect();
+    let doc = serde_json::json!({
+        "headers": headers,
+        "body": f.body,
+        "manifest": f.manifest,
+        "entries": f.entries,
+    });
+    hex(&Sha256::digest(serde_json::to_vec(&doc).unwrap()))
+}
+
 /// Every sample export: parsed (Paris, day-first), sliced and written; the RSMF bytes are hashed.
 fn samples(out: &mut Vec<String>) {
     let mut files: Vec<PathBuf> = walkdir::WalkDir::new(sample_dir().join("evidence"))
@@ -1026,7 +1053,7 @@ fn samples(out: &mut Vec<String>) {
                         w.events,
                         w.begin,
                         w.end,
-                        hex(&Sha256::digest(&bytes))
+                        content_digest(&w.path, &bytes)
                     ),
                 );
             }
