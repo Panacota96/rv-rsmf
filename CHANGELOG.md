@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please and reviewed by a human.
 
+## [0.3.3](https://github.com/Panacota96/rv-rsmf/compare/v0.3.2...v0.3.3) (2026-11-19)
+
+
+### Bug Fixes
+
+* **core:** time zones from the pinned IANA tzdb 2026f on every platform, recorded with each run; chrono and chrono-tz removed (RUSTSEC-2026-0543, RUSTSEC-2026-0555) ([4fc7b75](https://github.com/Panacota96/rv-rsmf/commit/4fc7b75b9aa6c614cacb81a70296042ed9a61477))
+
 ## [0.3.2](https://github.com/Panacota96/rv-rsmf/compare/v0.3.1...v0.3.2) (2026-11-14)
 
 
