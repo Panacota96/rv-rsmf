@@ -12,7 +12,7 @@
 //! ```toml
 //! [columns]                      # a name or a list of alternative names; matched case-insensitively
 //! timestamp = "Time"             # required
-//! timestamp_format = "auto"      # chrono strftime, "epoch_s", "epoch_ms", "iso" or "auto"
+//! timestamp_format = "auto"      # strftime (chrono syntax), "epoch_s", "epoch_ms", "iso" or "auto"
 //! timezone_column = "Zone"       # optional: IANA name or UTC offset per row
 //! conversation = "Chat ID"       # required: one conversation per distinct value
 //! sender = "From"                # required ("Name", "+57 300 000 0001" or "Name <+57 300 000 0001>")
@@ -40,14 +40,15 @@
 
 use super::{DateOrder, ExportInput, ParseError, ParseOptions};
 use crate::analyzer::{Finding, Severity};
+use crate::datetime::{FixedOffset, NaiveDate, NaiveDateTime, UtcTime};
 use crate::model::{
     Attachment, AttachmentData, Conversation, ConversationType, Direction, Event, ParsedExport,
     Participant, SourceLoc, stable_id,
 };
 use crate::report::capped_list;
 use crate::rsmf::local_to_utc;
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, TimeZone, Utc};
-use chrono_tz::Tz;
+use crate::strftime;
+use crate::zone::Tz;
 use regex::Regex;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -423,7 +424,7 @@ impl AutoTs {
             }
         };
         let y = if y < 100 { 2000 + y } else { y };
-        NaiveDate::from_ymd_opt(y as i32, m, d)?
+        NaiveDate::from_ymd_opt(i32::try_from(y).ok()?, m, d)?
             .and_hms_nano_opt(self.hms.0, self.hms.1, self.hms.2, self.nanos)
     }
 }
@@ -431,13 +432,13 @@ impl AutoTs {
 /// A time cell after the first look: an instant, a wall-clock time still needing a zone, or a numeric date
 /// still needing the day/month order.
 #[derive(Clone, Debug, PartialEq)]
-enum Cell {
-    Instant(DateTime<Utc>),
+pub(crate) enum Cell {
+    Instant(UtcTime),
     Local(NaiveDateTime),
     Auto(AutoTs),
 }
 
-fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
+pub(crate) fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
     let s = s.trim();
     if s.is_empty() {
         return Err("empty time".into());
@@ -454,25 +455,25 @@ fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
             } else {
                 return Err(bad());
             };
-            DateTime::from_timestamp(secs, nanos)
+            UtcTime::from_timestamp(secs, nanos)
                 .map(Cell::Instant)
                 .ok_or_else(bad)
         }
         TsFormat::EpochMs => s
             .parse::<i64>()
             .ok()
-            .and_then(DateTime::from_timestamp_millis)
+            .and_then(UtcTime::from_timestamp_millis)
             .map(Cell::Instant)
             .ok_or_else(bad),
         TsFormat::Strftime { fmt, has_offset } => {
             if *has_offset {
-                DateTime::parse_from_str(s, fmt)
-                    .map(|t| Cell::Instant(t.with_timezone(&Utc)))
+                strftime::parse_datetime(s, fmt)
+                    .map(Cell::Instant)
                     .map_err(|e| format!("{} ({e})", bad()))
             } else {
-                NaiveDateTime::parse_from_str(s, fmt)
+                strftime::parse_naive_datetime(s, fmt)
                     .or_else(|e| {
-                        NaiveDate::parse_from_str(s, fmt)
+                        strftime::parse_naive_date(s, fmt)
                             .map(|d| d.and_hms_opt(0, 0, 0).expect("midnight"))
                             .map_err(|_| e)
                     })
@@ -481,8 +482,8 @@ fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
             }
         }
         TsFormat::Iso | TsFormat::Auto => {
-            if let Ok(t) = DateTime::parse_from_rfc3339(s) {
-                return Ok(Cell::Instant(t.with_timezone(&Utc)));
+            if let Ok(t) = strftime::parse_rfc3339(s) {
+                return Ok(Cell::Instant(t));
             }
             let a = split_auto(s).ok_or_else(bad)?;
             if *f == TsFormat::Iso && !a.ymd {
@@ -493,21 +494,21 @@ fn first_look(s: &str, f: &TsFormat) -> Result<Cell, String> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Zone {
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Zone {
     Iana(Tz),
     Fixed(FixedOffset),
 }
 
 impl Zone {
-    fn parse(s: &str) -> Option<Zone> {
+    pub(crate) fn parse(s: &str) -> Option<Zone> {
         let s = s.trim();
         Tz::from_str(s)
             .ok()
             .map(Zone::Iana)
             .or_else(|| parse_offset(s).map(Zone::Fixed))
     }
-    fn name(&self) -> String {
+    pub(crate) fn name(&self) -> String {
         match self {
             Zone::Iana(t) => t.name().to_string(),
             Zone::Fixed(o) => format!("UTC{o}"),
@@ -966,7 +967,7 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
 
     // Pass 3: instants. Wall-clock times take the row's zone column, else --timezone.
     struct Timed {
-        utc: DateTime<Utc>,
+        utc: UtcTime,
         zone: Option<String>,
     }
     let mut timed: Vec<Option<Timed>> = Vec::with_capacity(rows.len());
@@ -995,10 +996,7 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
                     continue;
                 };
                 if let Some(off) = a.offset {
-                    let utc = off
-                        .from_local_datetime(&n)
-                        .single()
-                        .map(|t| t.with_timezone(&Utc));
+                    let utc = n.at_offset(off);
                     timed.push(utc.map(|utc| Timed { utc, zone: None }));
                     continue;
                 }
@@ -1007,7 +1005,7 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
         };
         let cell_zone = r.get(cols.tz).trim();
         let zone = if cell_zone.is_empty() {
-            opts.timezone.map(Zone::Iana)
+            opts.timezone.clone().map(Zone::Iana)
         } else {
             match Zone::parse(cell_zone) {
                 Some(z) => Some(z),
@@ -1024,24 +1022,18 @@ fn parse_with(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport,
             continue;
         };
         zones_used.insert(zone.name());
-        let utc = match zone {
+        let utc = match &zone {
             Zone::Iana(tz) => {
                 let (utc, flag) = local_to_utc(local, tz);
                 if let Some(flag) = flag {
-                    dst.push(format!(
-                        "row {}: {} ({flag})",
-                        r.row,
-                        local.format("%Y-%m-%d %H:%M:%S")
-                    ));
+                    dst.push(format!("row {}: {} ({flag})", r.row, local.ymd_hms()));
                     dst_zones.insert(tz.name().to_string());
                 }
                 utc
             }
-            Zone::Fixed(off) => off
-                .from_local_datetime(&local)
-                .single()
-                .expect("fixed offsets are never ambiguous")
-                .with_timezone(&Utc),
+            Zone::Fixed(off) => local
+                .at_offset(*off)
+                .expect("fixed offsets are never ambiguous"),
         };
         let from_column = !cell_zone.is_empty();
         timed.push(Some(Timed {
@@ -1388,7 +1380,6 @@ mod tests {
     use super::*;
     use crate::model::SourceKind;
     use crate::sources::CsvProfile;
-    use chrono::Timelike;
 
     fn export_of(dir: &Path, name: &str, bytes: &[u8]) -> ExportInput {
         let p = dir.join(name);
@@ -1403,7 +1394,7 @@ mod tests {
 
     fn madrid() -> ParseOptions {
         ParseOptions {
-            timezone: Some(chrono_tz::Europe::Madrid),
+            timezone: Some("Europe/Madrid".parse().unwrap()),
             ..Default::default()
         }
     }
@@ -1488,7 +1479,7 @@ mod tests {
         o.csv_map = Some(map.clone());
         let p = parse(&e, &o).unwrap();
         assert_eq!(p.events.len(), 2);
-        assert_eq!(p.events[0].timestamp.unwrap().hour(), 9); // CET = UTC+1
+        assert_eq!(p.events[0].timestamp.unwrap().naive_utc().hour(), 9); // CET = UTC+1
         assert_eq!(
             p.events[1].timestamp.unwrap().to_rfc3339(),
             "2026-10-25T00:30:00+00:00"

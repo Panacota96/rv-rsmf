@@ -57,14 +57,14 @@ fn samples_convert_to_valid_round_tripping_rsmf() {
             .unwrap_or_else(|| panic!("{name}: no export planned for {}", primary.display()));
         let kind = SourceKind::parse(want["source"].as_str().unwrap()).unwrap();
         assert_eq!(export.kind, kind, "{name}: detected kind");
-        let tz: Option<chrono_tz::Tz> = want["options"]["timezone"]
+        let tz: Option<rv_rsmf_core::zone::Tz> = want["options"]["timezone"]
             .as_str()
             .map(|t| t.parse().unwrap());
         let order = want["options"]["date_order"]
             .as_str()
             .map(|o| DateOrder::parse(o).unwrap());
         let opts = ParseOptions {
-            timezone: tz,
+            timezone: tz.clone(),
             date_order: order,
             ..ParseOptions::default()
         };
@@ -99,15 +99,15 @@ fn samples_convert_to_valid_round_tripping_rsmf() {
         let p = sources::parse(export, &opts).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(p.source, Some(kind));
 
-        let slice_tz = tz.unwrap_or(chrono_tz::UTC);
+        let slice_tz = tz.clone().unwrap_or_else(rv_rsmf_core::zone::Tz::utc);
         let wo = WriteOptions {
-            tz: slice_tz,
+            tz: slice_tz.clone(),
             custodian: None,
             platform: rsmf::platform_for(kind, None),
             generator: "rv-rsmf test".into(),
             collection_seed: format!("TEST-{name}"),
         };
-        let slices = rsmf::slice(&p, slice_tz);
+        let slices = rsmf::slice(&p, &slice_tz);
         let (d1, d2) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
         let (mut packed, mut missing, mut events) = (0usize, 0usize, 0usize);
         for s in &slices {

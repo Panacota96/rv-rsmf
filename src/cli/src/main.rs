@@ -628,7 +628,7 @@ FORENSIC NOTES:
 fn convert_options(c: &ChatArgs) -> Result<ConvertOptions, String> {
     let timezone = match &c.timezone {
         None => None,
-        Some(z) => Some(z.parse::<chrono_tz::Tz>().map_err(|_| {
+        Some(z) => Some(z.parse::<rv_rsmf_core::zone::Tz>().map_err(|_| {
             format!(
                 "unknown time zone '{z}': use an IANA name such as Europe/Paris or America/Bogota"
             )

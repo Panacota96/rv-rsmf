@@ -10,7 +10,7 @@
 //! ```
 
 use crate::analyzer::Finding;
-use chrono::{DateTime, Utc};
+use crate::datetime::UtcTime;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -166,7 +166,7 @@ pub struct Reaction {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Edit {
     pub participant: String,
-    pub timestamp: Option<DateTime<Utc>>,
+    pub timestamp: Option<UtcTime>,
     pub previous: Option<String>,
     pub new: Option<String>,
 }
@@ -179,7 +179,7 @@ pub struct Event {
     pub conversation: String,
     pub participant: Option<String>,
     /// UTC. None only when the source has no time at all (the event is then reported and kept last).
-    pub timestamp: Option<DateTime<Utc>>,
+    pub timestamp: Option<UtcTime>,
     /// The time exactly as written in the export (kept for the trace and the report).
     pub source_time: String,
     pub body: String,

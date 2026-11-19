@@ -4,7 +4,7 @@
 #![allow(dead_code)]
 
 use super::make_msg::{Msg, msg_bytes};
-use chrono::{TimeZone, Utc};
+use rv_rsmf_core::datetime::UtcTime;
 
 /// A 1×1 transparent PNG.
 pub const PNG_1X1: &[u8] = &[
@@ -40,7 +40,7 @@ pub fn teams_messages() -> Vec<(&'static str, Msg)> {
                 display_to: some("Bruno Díaz; Carla Gómez"),
                 recipients: r(&[bruno, carla]),
                 body: some("Buenos días equipo, ¿revisamos hoy el cronograma del piloto?"),
-                submit_time: Some(Utc.with_ymd_and_hms(2026, 3, 2, 9, 15, 0).unwrap()),
+                submit_time: Some(UtcTime::from_ymd_hms(2026, 3, 2, 9, 15, 0).unwrap()),
                 message_id: some("<msg-0001@teams.example.com>"),
                 ..Default::default()
             },
@@ -57,7 +57,7 @@ pub fn teams_messages() -> Vec<(&'static str, Msg)> {
                 html: some(
                     "<html><body><div><p>Sí, adjunto la agenda.</p><p>Hora propuesta: 15:00 &amp; sala 2</p></div></body></html>",
                 ),
-                submit_time: Some(Utc.with_ymd_and_hms(2026, 3, 2, 9, 20, 30).unwrap()),
+                submit_time: Some(UtcTime::from_ymd_hms(2026, 3, 2, 9, 20, 30).unwrap()),
                 message_id: some("<msg-0002@teams.example.com>"),
                 in_reply_to: some("<msg-0001@teams.example.com>"),
                 attachments: vec![(
@@ -77,7 +77,7 @@ pub fn teams_messages() -> Vec<(&'static str, Msg)> {
                 display_to: some("Ana Ruiz; Bruno Díaz"),
                 body: some("Carla Gómez cambió el nombre del canal a General."),
                 // Only the delivery time: exercises the fallback.
-                delivery_time: Some(Utc.with_ymd_and_hms(2026, 3, 2, 9, 25, 0).unwrap()),
+                delivery_time: Some(UtcTime::from_ymd_hms(2026, 3, 2, 9, 25, 0).unwrap()),
                 message_id: some("<msg-0003@teams.example.com>"),
                 ..Default::default()
             },
@@ -91,7 +91,7 @@ pub fn teams_messages() -> Vec<(&'static str, Msg)> {
                 sender_smtp: some("facturacion@example.com"),
                 display_to: some("Ana Ruiz"),
                 body: some("Correo de ejemplo: no es un mensaje de Teams."),
-                submit_time: Some(Utc.with_ymd_and_hms(2026, 3, 2, 10, 0, 0).unwrap()),
+                submit_time: Some(UtcTime::from_ymd_hms(2026, 3, 2, 10, 0, 0).unwrap()),
                 ..Default::default()
             },
         ),

@@ -9,9 +9,9 @@
 pub mod shortcodes;
 
 use crate::analyzer::{Finding, Severity};
+use crate::datetime::{NaiveDate, NaiveDateTime, UtcTime};
 use crate::model::{AttachmentData, Event, ParsedExport, SourceKind};
-use chrono::{DateTime, NaiveDate, TimeZone, Timelike, Utc};
-use chrono_tz::Tz;
+use crate::zone::{LocalOffset, Tz};
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
@@ -41,7 +41,7 @@ impl Slice {
     pub fn file_stem(&self) -> String {
         let day = self
             .day
-            .map(|d| d.format("%Y-%m-%d").to_string())
+            .map(|d| d.ymd())
             .unwrap_or_else(|| "undated".into());
         if self.part == 0 {
             day
@@ -53,10 +53,10 @@ impl Slice {
 
 /// Splits every conversation into one slice per calendar day in `tz`; a day with more than MAX_EVENTS events
 /// is split into 12-hour, then 8-hour windows, then into consecutive chunks of MAX_EVENTS.
-pub fn slice(p: &ParsedExport, tz: Tz) -> Vec<Slice> {
+pub fn slice(p: &ParsedExport, tz: &Tz) -> Vec<Slice> {
     let mut by_day: BTreeMap<(String, Option<NaiveDate>), Vec<usize>> = BTreeMap::new();
     for (i, e) in p.events.iter().enumerate() {
-        let day = e.timestamp.map(|t| t.with_timezone(&tz).date_naive());
+        let day = e.timestamp.map(|t| tz.to_local(&t).date());
         by_day
             .entry((e.conversation.clone(), day))
             .or_default()
@@ -89,7 +89,7 @@ pub fn slice(p: &ParsedExport, tz: Tz) -> Vec<Slice> {
             for &i in &idx {
                 let h = p.events[i]
                     .timestamp
-                    .map(|t| t.with_timezone(&tz).hour())
+                    .map(|t| tz.to_local(&t).hour())
                     .unwrap_or(0);
                 w.entry(h / hours).or_default().push(i);
             }
@@ -152,8 +152,8 @@ pub struct WrittenSlice {
     pub end: Option<String>,
 }
 
-pub fn rsmf_time(t: &DateTime<Utc>) -> String {
-    t.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+pub fn rsmf_time(t: &UtcTime) -> String {
+    format!("{}Z", t.ymd_t_hms())
 }
 
 /// A GUID-shaped id from a seed (SHA-256 based, version nibble 5 style), deterministic.
@@ -487,7 +487,7 @@ pub fn build_slice(
     let written = WrittenSlice {
         path: PathBuf::new(),
         conversation: conv.id.clone(),
-        day: s.day.map(|d| d.format("%Y-%m-%d").to_string()),
+        day: s.day.map(|d| d.ymd()),
         part: s.part,
         events: events.len(),
         attachments: packed,
@@ -1043,7 +1043,7 @@ pub fn validate_manifest(m: &Value, entries: &BTreeMap<String, String>) -> Valid
             strict(format!("{at}: parent {p} is not an event in this file"));
         }
         if let Some(t) = e["timestamp"].as_str()
-            && (!t.ends_with('Z') || DateTime::parse_from_rfc3339(t).is_err())
+            && (!t.ends_with('Z') || crate::strftime::parse_rfc3339(t).is_err())
         {
             strict(format!("{at}: timestamp '{t}' is not RFC 3339 UTC (…Z)"));
         }
@@ -1156,28 +1156,33 @@ pub fn slice_findings(ws: &WrittenSlice, v: &Validation, rt: &[String]) -> Vec<F
 /// Local wall-clock time → UTC in `tz`, reporting DST problems: Ok((utc, None)) normally,
 /// Ok((utc, Some("ambiguous"|"nonexistent"))) when the clock change makes the time ambiguous (the earlier
 /// instant is used) or impossible (shifted forward by the gap).
-pub fn local_to_utc(local: chrono::NaiveDateTime, tz: Tz) -> (DateTime<Utc>, Option<&'static str>) {
-    match tz.from_local_datetime(&local) {
-        chrono::LocalResult::Single(t) => (t.with_timezone(&Utc), None),
-        chrono::LocalResult::Ambiguous(a, _) => (a.with_timezone(&Utc), Some("ambiguous")),
-        chrono::LocalResult::None => {
-            // Skipped wall-clock time (clocks moved forward): read it with the UTC offset in force just before the
-            // change, i.e. as if the clock had not been changed yet. Equivalent to shifting it forward by the length
-            // of the gap (1 h in Europe, 30 min on Lord Howe Island).
-            use chrono::Offset;
-            let t = (1..=180)
-                .map(|m| local - chrono::Duration::minutes(m))
-                .find_map(|l| tz.from_local_datetime(&l).earliest())
-                .map(|before| {
-                    let off = before.offset().fix();
-                    Utc.from_utc_datetime(
-                        &(local - chrono::Duration::seconds(off.local_minus_utc() as i64)),
-                    )
-                })
-                .unwrap_or_else(|| Utc.from_utc_datetime(&local));
-            (t, Some("nonexistent"))
-        }
+pub fn local_to_utc(local: NaiveDateTime, tz: &Tz) -> (UtcTime, Option<&'static str>) {
+    // An offset that would take the instant out of the supported range counts as no reading (as with chrono).
+    let at = |off: i32| {
+        local
+            .and_utc()
+            .timestamp()
+            .checked_sub(i64::from(off))
+            .and_then(|s| UtcTime::from_timestamp(s, local.nanosecond()))
+    };
+    let read = match tz.from_local(&local) {
+        LocalOffset::Single(o) => at(o).map(|t| (t, None)),
+        LocalOffset::Ambiguous(a, b) => at(a).zip(at(b)).map(|(t, _)| (t, Some("ambiguous"))),
+        LocalOffset::None => None,
+    };
+    if let Some(r) = read {
+        return r;
     }
+    // Skipped wall-clock time (clocks moved forward): read it with the UTC offset in force just before the
+    // change, i.e. as if the clock had not been changed yet. Equivalent to shifting it forward by the length
+    // of the gap (1 h in Europe, 30 min on Lord Howe Island). A gap longer than 3 hours (Samoa 2011) is read
+    // as UTC, as before.
+    let secs = local.local_seconds();
+    let t = (1..=180)
+        .find_map(|m| tz.from_local_seconds(secs - m * 60).earliest())
+        .and_then(|off| UtcTime::from_timestamp(secs - i64::from(off), local.nanosecond()))
+        .unwrap_or_else(|| local.and_utc());
+    (t, Some("nonexistent"))
 }
 
 /// Platform shown in RSMF for a source, unless overridden.
@@ -1193,7 +1198,7 @@ mod tests {
     use super::*;
     use crate::model::*;
 
-    fn sample(n: usize, tz: Tz) -> ParsedExport {
+    fn sample(n: usize, tz: &Tz) -> ParsedExport {
         let a = Participant {
             id: "p-a".into(),
             display: "Ana Ñúñez".into(),
@@ -1236,7 +1241,7 @@ mod tests {
                     },
                 );
                 e.participant = Some(if i % 2 == 0 { "p-a" } else { "p-b" }.into());
-                e.timestamp = Some(start + chrono::Duration::seconds(i as i64 * 3));
+                e.timestamp = Some(start.plus_seconds(i as i64 * 3));
                 e.body = format!("message {i}");
                 e
             })
@@ -1251,9 +1256,9 @@ mod tests {
         }
     }
 
-    fn opts(tz: Tz) -> WriteOptions {
+    fn opts(tz: &Tz) -> WriteOptions {
         WriteOptions {
-            tz,
+            tz: tz.clone(),
             custodian: Some("Ana Ñúñez".into()),
             platform: "WhatsApp".into(),
             generator: "rv-rsmf test".into(),
@@ -1264,7 +1269,7 @@ mod tests {
     #[test]
     fn written_file_validates_round_trips_and_is_deterministic() {
         let tz: Tz = "Europe/Paris".parse().unwrap();
-        let mut p = sample(5, tz);
+        let mut p = sample(5, &tz);
         p.events[1].reactions.push(Reaction {
             value: "👍".into(),
             count: Some(1),
@@ -1282,12 +1287,12 @@ mod tests {
                 reason: "<Media omitted>".into(),
             },
         });
-        let slices = slice(&p, tz);
+        let slices = slice(&p, &tz);
         assert_eq!(slices.len(), 1);
         let d1 = tempfile::tempdir().unwrap();
         let d2 = tempfile::tempdir().unwrap();
-        let (w1, b1) = write_slice(&p, &slices[0], &opts(tz), d1.path()).unwrap();
-        let (_, b2) = write_slice(&p, &slices[0], &opts(tz), d2.path()).unwrap();
+        let (w1, b1) = write_slice(&p, &slices[0], &opts(&tz), d1.path()).unwrap();
+        let (_, b2) = write_slice(&p, &slices[0], &opts(&tz), d2.path()).unwrap();
         assert_eq!(b1, b2, "same input → byte-identical .rsmf");
         let (v, f) = validate_file(&w1.path).unwrap();
         assert!(v.ok(), "{v:?}");
@@ -1306,8 +1311,8 @@ mod tests {
     #[test]
     fn dense_days_are_split_and_share_the_collection_id() {
         let tz: Tz = "UTC".parse().unwrap();
-        let p = sample(MAX_EVENTS + 500, tz);
-        let s = slice(&p, tz);
+        let p = sample(MAX_EVENTS + 500, &tz);
+        let s = slice(&p, &tz);
         assert!(s.len() >= 2);
         assert!(
             s.iter()
@@ -1354,10 +1359,10 @@ mod tests {
             .unwrap()
             .and_hms_opt(2, 30, 0)
             .unwrap();
-        assert_eq!(local_to_utc(gap, tz).1, Some("nonexistent"));
-        assert_eq!(local_to_utc(overlap, tz).1, Some("ambiguous"));
+        assert_eq!(local_to_utc(gap, &tz).1, Some("nonexistent"));
+        assert_eq!(local_to_utc(overlap, &tz).1, Some("ambiguous"));
         assert_eq!(
-            rsmf_time(&local_to_utc(overlap, tz).0),
+            rsmf_time(&local_to_utc(overlap, &tz).0),
             "2026-10-25T00:30:00Z"
         );
     }
@@ -1365,12 +1370,12 @@ mod tests {
     #[test]
     fn a_reply_to_another_day_stays_valid() {
         let tz: Tz = "UTC".parse().unwrap();
-        let mut p = sample(2, tz);
-        p.events[1].timestamp = p.events[0].timestamp.map(|t| t + chrono::Duration::days(1));
+        let mut p = sample(2, &tz);
+        p.events[1].timestamp = p.events[0].timestamp.map(|t| t.plus_seconds(86_400));
         p.events[1].parent = Some(p.events[0].id.clone());
         let d = tempfile::tempdir().unwrap();
-        for s in slice(&p, tz) {
-            let (w, _) = write_slice(&p, &s, &opts(tz), d.path()).unwrap();
+        for s in slice(&p, &tz) {
+            let (w, _) = write_slice(&p, &s, &opts(&tz), d.path()).unwrap();
             let (v, f) = validate_file(&w.path).unwrap();
             assert!(v.ok(), "{v:?}");
             if s.events.contains(&1) {
@@ -1387,7 +1392,7 @@ mod tests {
     #[test]
     fn unreadable_attachment_is_reported_missing_not_fatal() {
         let tz: Tz = "UTC".parse().unwrap();
-        let mut p = sample(1, tz);
+        let mut p = sample(1, &tz);
         p.events[0].attachments.push(Attachment {
             display: "gone.jpg".into(),
             data: AttachmentData::File {
@@ -1395,8 +1400,8 @@ mod tests {
             },
         });
         let d = tempfile::tempdir().unwrap();
-        let s = slice(&p, tz);
-        let (w, _) = write_slice(&p, &s[0], &opts(tz), d.path()).unwrap();
+        let s = slice(&p, &tz);
+        let (w, _) = write_slice(&p, &s[0], &opts(&tz), d.path()).unwrap();
         assert_eq!(w.missing_attachments, 1);
         assert!(validate_file(&w.path).unwrap().0.ok());
     }
@@ -1409,7 +1414,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(2, 10, 0)
             .unwrap();
-        let (t, why) = local_to_utc(gap, tz);
+        let (t, why) = local_to_utc(gap, &tz);
         assert_eq!(why, Some("nonexistent"));
         assert_eq!(rsmf_time(&t), "2026-10-03T15:40:00Z"); // 02:10 at +10:30 = 02:40 at +11:00
         let paris: Tz = "Europe/Paris".parse().unwrap();
@@ -1417,6 +1422,9 @@ mod tests {
             .unwrap()
             .and_hms_opt(2, 30, 0)
             .unwrap();
-        assert_eq!(rsmf_time(&local_to_utc(p, paris).0), "2026-03-29T01:30:00Z"); // 02:30 CET
+        assert_eq!(
+            rsmf_time(&local_to_utc(p, &paris).0),
+            "2026-03-29T01:30:00Z"
+        ); // 02:30 CET
     }
 }

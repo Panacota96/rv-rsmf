@@ -35,7 +35,9 @@ impl ConvertOptions {
     pub fn to_json(&self) -> Value {
         json!({
             "source": self.parse.source.map(|s| s.name()),
-            "timezone": self.parse.timezone.map(|t| t.name().to_string()),
+            "timezone": self.parse.timezone.as_ref().map(|t| t.name().to_string()),
+            // IANA time zone database release used for --timezone and zone columns (bundled, every platform).
+            "tzdb": jiff_tzdb::VERSION,
             "date_order": self.parse.date_order.map(|d| d.name()),
             "csv_map": self.parse.csv_map.as_ref().map(|p| p.display().to_string()),
             "csv_profile": self.parse.csv_profile.name(),
@@ -116,13 +118,13 @@ pub fn preflight(
 /// Pipeline-level findings computed on the neutral model.
 pub fn model_findings(p: &ParsedExport, opts: &ConvertOptions) -> Vec<Finding> {
     let mut f = vec![];
-    if let (Some(k), Some(tz)) = (p.source, opts.parse.timezone)
+    if let (Some(k), Some(tz)) = (p.source, opts.parse.timezone.as_ref())
         && (k.needs_timezone() || p.facts.get("timezone_used").is_some_and(|v| v == "yes"))
     {
         f.push(Finding::new("TIMEZONE_APPLIED", Severity::Info).with("timezone", tz.name()));
     }
     // Out of order within a conversation, in export order.
-    let mut last: BTreeMap<&str, chrono::DateTime<chrono::Utc>> = BTreeMap::new();
+    let mut last: BTreeMap<&str, crate::datetime::UtcTime> = BTreeMap::new();
     let mut back = 0usize;
     let mut first = None;
     for e in &p.events {
@@ -322,7 +324,11 @@ pub fn convert_items(
         .map_err(io)?;
         let mut findings = parsed.findings.clone();
         findings.extend(model_findings(&parsed, opts));
-        let tz = opts.parse.timezone.unwrap_or(chrono_tz::UTC);
+        let tz = opts
+            .parse
+            .timezone
+            .clone()
+            .unwrap_or_else(crate::zone::Tz::utc);
         let wo = WriteOptions {
             tz,
             custodian: opts.parse.custodian.clone(),
@@ -337,7 +343,7 @@ pub fn convert_items(
                     .unwrap_or("")
             ),
         };
-        let slices: Vec<Slice> = rsmf::slice(&parsed, tz);
+        let slices: Vec<Slice> = rsmf::slice(&parsed, &wo.tz);
         // Busy days split into parts.
         let mut split: BTreeMap<(String, String), u32> = BTreeMap::new();
         for s in slices.iter().filter(|s| s.part > 0) {

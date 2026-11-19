@@ -15,13 +15,13 @@
 
 use super::{DateOrder, ExportInput, ParseError, ParseOptions};
 use crate::analyzer::{Finding, Severity};
+use crate::datetime::{NaiveDate, NaiveDateTime};
 use crate::model::{
     Attachment, AttachmentData, Conversation, ConversationType, Direction, Event, EventType,
     ParsedExport, Participant, SourceLoc, stable_id,
 };
 use crate::report::capped_list;
 use crate::rsmf::local_to_utc;
-use chrono::NaiveDate;
 use regex::Regex;
 use std::collections::{BTreeMap, HashMap};
 use std::io::Read;
@@ -451,7 +451,7 @@ fn decide_order(
     }
 }
 
-fn local_time(h: &Header, order: DateOrder) -> Result<chrono::NaiveDateTime, ParseError> {
+fn local_time(h: &Header, order: DateOrder) -> Result<NaiveDateTime, ParseError> {
     let [a, b, c] = h.d;
     let (y, m, d) = match order {
         DateOrder::Dmy => (c, b, a),
@@ -468,7 +468,10 @@ fn local_time(h: &Header, order: DateOrder) -> Result<chrono::NaiveDateTime, Par
             order.name()
         ))
     };
-    let date = NaiveDate::from_ymd_opt(y as i32, m, d).ok_or_else(|| bad("not a valid date"))?;
+    let date = i32::try_from(y)
+        .ok()
+        .and_then(|y| NaiveDate::from_ymd_opt(y, m, d))
+        .ok_or_else(|| bad("not a valid date"))?;
     let hour = match h.pm {
         None => h.hour,
         Some(pm) => {
@@ -619,7 +622,7 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
 
     // 2. Date order, then time zone (both are the examiner's decision when the file does not settle them).
     let (order, basis, order_finding, option_used) = decide_order(&headers, opts.date_order)?;
-    let tz = opts.timezone.ok_or(ParseError::NeedsTimezone)?;
+    let tz = opts.timezone.clone().ok_or(ParseError::NeedsTimezone)?;
 
     let mut out = ParsedExport::default();
     let conv_id = stable_id(
@@ -653,7 +656,7 @@ pub fn parse(export: &ExportInput, opts: &ParseOptions) -> Result<ParsedExport, 
     for (n, b) in blocks.iter().enumerate() {
         let h = &b.header;
         let local = local_time(h, order)?;
-        let (utc, problem) = local_to_utc(local, tz);
+        let (utc, problem) = local_to_utc(local, &tz);
         let mut e = Event::message(
             format!("e-{:06}", n + 1),
             conv_id.clone(),
@@ -858,7 +861,7 @@ mod tests {
     use super::*;
     use crate::model::SourceKind;
 
-    fn tz(s: &str) -> chrono_tz::Tz {
+    fn tz(s: &str) -> crate::zone::Tz {
         s.parse().unwrap()
     }
 
@@ -963,7 +966,7 @@ mod tests {
         let t: Vec<String> = p
             .events
             .iter()
-            .map(|e| e.timestamp.unwrap().format("%H:%M").to_string())
+            .map(|e| e.timestamp.unwrap().ymd_t_hms()[11..16].to_string())
             .collect();
         assert_eq!(t, ["00:05", "12:05", "13:05"]);
         assert_eq!(codes(&p), ["DATE_ORDER_CHOSEN"]);
@@ -1027,7 +1030,7 @@ mod tests {
         );
         let p = run("c.txt", amb, &opts("UTC", Some(DateOrder::Mdy))).unwrap();
         assert_eq!(
-            p.events[0].timestamp.unwrap().format("%m-%d").to_string(),
+            p.events[0].timestamp.unwrap().ymd_t_hms()[5..10].to_string(),
             "03-04"
         );
         // The file decides: a contradicting --date-order is not used, only recorded.
@@ -1038,7 +1041,7 @@ mod tests {
         assert_eq!(p.facts["date_order_option"], "mdy");
         assert_eq!(p.facts["date_order_option_used"], "no");
         assert_eq!(
-            p.events[0].timestamp.unwrap().format("%m-%d").to_string(),
+            p.events[0].timestamp.unwrap().ymd_t_hms()[5..10].to_string(),
             "04-25"
         );
         let p = run("c.txt", amb, &opts("UTC", Some(DateOrder::Dmy))).unwrap();
@@ -1336,11 +1339,7 @@ mod tests {
             AttachmentData::Missing { .. }
         ));
         assert_eq!(
-            p.events[0]
-                .timestamp
-                .unwrap()
-                .format("%H:%M:%S")
-                .to_string(),
+            p.events[0].timestamp.unwrap().ymd_t_hms()[11..].to_string(),
             "21:15:02"
         );
     }

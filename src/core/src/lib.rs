@@ -13,6 +13,7 @@ pub mod analyzer;
 pub mod audit;
 pub mod case;
 pub mod convert;
+pub mod datetime;
 pub mod env;
 pub mod events;
 pub mod hash;
@@ -25,9 +26,11 @@ pub mod report;
 pub mod rsmf;
 pub mod run;
 pub mod sources;
+pub mod strftime;
 pub mod time;
 pub mod trust;
 pub mod verify;
+pub mod zone;
 
 pub use case::CaseRole;
 pub use events::Event;
@@ -42,3 +45,6 @@ pub const TOOL_VERSION: &str = env!("RV_VERSION");
 /// This tool's place in a shared case folder (see docs/case-folder.md): rv-rsmf is an ANALYSIS tool — it verifies
 /// every item against the registry written by the intake tool, rv-hashinv. Keep equal to `case_role` in .forge.json.
 pub const CASE_ROLE: CaseRole = CaseRole::Analysis;
+
+#[cfg(test)]
+mod golden;

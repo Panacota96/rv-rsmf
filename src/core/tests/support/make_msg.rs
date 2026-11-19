@@ -3,7 +3,7 @@
 //! the same bytes. Only for synthetic samples and tests — never for evidence.
 #![allow(dead_code)]
 
-use chrono::{DateTime, Utc};
+use rv_rsmf_core::datetime::UtcTime;
 use std::io::{Cursor, Write};
 
 const PT_LONG: u16 = 0x0003;
@@ -25,15 +25,15 @@ pub struct Msg {
     pub body: Option<String>,
     /// Written as PR_HTML (binary, UTF-8, PR_INTERNET_CPID 65001).
     pub html: Option<String>,
-    pub submit_time: Option<DateTime<Utc>>,
-    pub delivery_time: Option<DateTime<Utc>>,
+    pub submit_time: Option<UtcTime>,
+    pub delivery_time: Option<UtcTime>,
     pub message_id: Option<String>,
     pub in_reply_to: Option<String>,
     /// (long file name, bytes) → `__attach_version1.0_#` storages with PR_ATTACH_DATA_BIN.
     pub attachments: Vec<(String, Vec<u8>)>,
 }
 
-pub fn filetime(t: DateTime<Utc>) -> u64 {
+pub fn filetime(t: UtcTime) -> u64 {
     ((t.timestamp() + 11_644_473_600) as u64) * 10_000_000
         + (t.timestamp_subsec_nanos() / 100) as u64
 }
