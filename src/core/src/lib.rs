@@ -29,6 +29,7 @@ pub mod sources;
 pub mod strftime;
 pub mod time;
 pub mod trust;
+pub mod update;
 pub mod verify;
 pub mod zone;
 
