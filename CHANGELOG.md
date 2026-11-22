@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please and reviewed by a human.
 
+## [0.4.0](https://github.com/Panacota96/rv-rsmf/compare/v0.3.3...v0.4.0) (2026-11-21)
+
+
+### Features
+
+* **update:** check for a newer release (update-check, start-up banner) ([#22](https://github.com/Panacota96/rv-rsmf/issues/22)) ([a4fb979](https://github.com/Panacota96/rv-rsmf/commit/a4fb9796acf7426e9daf93e9849e2beb7aebdcea))
+
 ## [0.3.3](https://github.com/Panacota96/rv-rsmf/compare/v0.3.2...v0.3.3) (2026-11-19)
 
 
