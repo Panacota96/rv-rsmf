@@ -81,7 +81,7 @@ variables or prompts and never logged; no GPL/AGPL/LGPL components; tools report
 
 ## 6. Open work
 
-- The licence (`LICENSE`) and the admissibility analysis (`docs/admissibility.md`) are drafts pending a lawyer's review (Colombia and France).
+- Licence: PolyForm Noncommercial 1.0.0 (`LICENSE`, owner decision 2026-11-24; commercial use needs a licence from Rakvor, `COMMERCIAL.md`). Rakvor's licensing texts (`COMMERCIAL.md`, `NOTICE`) and the admissibility analysis (`docs/admissibility.md`) are drafts pending a lawyer's review (Colombia and France).
 - Revocation of the TSA certificate is never checked by the tools (gap G18): it is established separately from CRL/OCSP evidence covering genTime ([ADR 0002](adr/0002-tsa-token-verification.md)).
 - Recorded outputs (gap G19, closed): `verify-log` and `verify-case` re-hash every `.rsmf` file, trace, report,
   `hashes.csv` and `environment.json` the audit log records (`src/core/src/outputs.rs`). The Python oracle

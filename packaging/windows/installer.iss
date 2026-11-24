@@ -42,6 +42,7 @@ Source: "{#SourceDir}\target\release\rv-rsmf.exe"; DestDir: "{app}"; Flags: igno
 Source: "{#SourceDir}\target\release\rv-rsmf-gui.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\README.md"; DestDir: "{app}"
 Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"
+Source: "{#SourceDir}\COMMERCIAL.md"; DestDir: "{app}"
 Source: "{#SourceDir}\NOTICE"; DestDir: "{app}"
 Source: "{#SourceDir}\CHANGELOG.md"; DestDir: "{app}"
 Source: "{#SourceDir}\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs

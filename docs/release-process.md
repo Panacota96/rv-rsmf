@@ -79,7 +79,7 @@ files on that release (`gh release upload --clobber`). The tag and changelog sta
 | Build | `cargo build --release --locked -p rv-rsmf-cli -p rv-rsmf-gui` (static CRT) | compile error or lockfile out of date |
 | Sign executables | `signtool sign /f sign.pfx /p *** /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 rv-rsmf.exe rv-rsmf-gui.exe` (only when `SIGN_PFX_BASE64` exists) | bad certificate or password |
 | Self-test | `rv-rsmf.exe self-test` + `examples\sample\run.ps1` (conversion of every sample, `verify-log`, `validate`, `hashes.csv` vs `expected_hashes.csv`) | wrong hashes, invalid RSMF, a high finding, broken log |
-| Portable zip | executables + README, LICENSE, NOTICE, CHANGELOG, `docs\`, `examples\` (without `examples\sample\out`) | — |
+| Portable zip | executables + README, LICENSE, COMMERCIAL.md, NOTICE, CHANGELOG, `docs\`, `examples\` (without `examples\sample\out`) | — |
 | Installer | `ISCC.exe /DAppVersion=X.Y.Z /DSourceDir=. /Odist packaging\windows\installer.iss` | Inno Setup script error |
 | Sign installer | same signtool command on `dist\*-setup.exe` | as above |
 | SBOM | `cargo cyclonedx --format json --spec-version 1.5` → `sbom.cdx.json` | — |
@@ -163,7 +163,7 @@ Get-FileHash dist\* -Algorithm SHA256 | Format-Table Hash, Path
 ```
 
 (`ConvertFrom-SecureString -AsPlainText` needs PowerShell 7.) Build the portable zip as the workflow does (copy the
-two executables, README, LICENSE, NOTICE, CHANGELOG, `docs\`, `examples\` without `examples\sample\out`, then
+two executables, README, LICENSE, COMMERCIAL.md, NOTICE, CHANGELOG, `docs\`, `examples\` without `examples\sample\out`, then
 `Compress-Archive`). Upload with `gh release upload vX.Y.Z dist\* --clobber`. A hand-made build has no provenance
 attestation.
 
