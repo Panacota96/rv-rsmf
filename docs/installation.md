@@ -43,7 +43,7 @@ Release assets on the GitHub Releases page of the repository (`Panacota96/rv-rsm
 
 | Asset | What it is |
 | --- | --- |
-| `rv-rsmf-X.Y.Z-windows-x64.zip` | Portable: `rv-rsmf.exe`, `rv-rsmf-gui.exe`, README, LICENSE, NOTICE, CHANGELOG, `docs/`, `examples/` |
+| `rv-rsmf-X.Y.Z-windows-x64.zip` | Portable: `rv-rsmf.exe`, `rv-rsmf-gui.exe`, README, LICENSE, COMMERCIAL.md, NOTICE, CHANGELOG, `docs/`, `examples/` |
 | `rv-rsmf-X.Y.Z-windows-x64-setup.exe` | Inno Setup installer, per-user |
 | `SHA256SUMS` | SHA-256 of the zip, the installer and the SBOM (`sha256sum` format: `<hash>  ./<file>`) |
 | `sbom.cdx.json` | CycloneDX software bill of materials (every Rust dependency and version) |
@@ -155,7 +155,7 @@ two tasks: **Add the rv-rsmf command to PATH** (user PATH, checked on first inst
 .\rv-rsmf-0.1.0-windows-x64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="addtopath"
 ```
 
-The installer copies the executables, README, LICENSE, NOTICE, CHANGELOG, `docs\` and the sample evidence
+The installer copies the executables, README, LICENSE, COMMERCIAL.md, NOTICE, CHANGELOG, `docs\` and the sample evidence
 (`examples\sample\evidence\` with its subfolders), not the sample scripts, `expected\` or `expected_hashes.csv`. Use the portable zip for the
 sample check of step 6.
 
