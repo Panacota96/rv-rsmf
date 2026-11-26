@@ -260,21 +260,37 @@ Options:
           Print help (see a summary with '-h')
 
 EXAMPLES:
-  Convert an Android WhatsApp export (phone set to Paris time), Spanish reports:
-    rv-rsmf convert -i "D:\export\WhatsApp Chat with Ana.txt" --timezone Europe/Paris --lang es
-  Check the dates first, then convert an ambiguous export (all days <= 12) read as day/month/year:
-    rv-rsmf preview -i chat.txt --timezone America/Bogota
-    rv-rsmf convert -i chat.txt --timezone America/Bogota --date-order dmy --custodian "Ana Ruiz"
-  Convert a Telegram Desktop export (times are UTC in the export) and a folder of Teams .msg files:
-    rv-rsmf convert -i D:\telegram\result.json -i D:\purview\teams -r
-  Convert an XRY-style CSV with your own column mapping:
-    rv-rsmf convert -i chats.csv --csv-map xry.toml --timezone Europe/Madrid
+  Convert an Android WhatsApp export (the phone was set to Paris time), reports in Spanish:
+    rv-rsmf convert -i D:\evidence\whatsapp-android-en --timezone Europe/Paris --lang es
+  Check the dates first, then convert an export whose dates can be read both ways (every day <= 12):
+    rv-rsmf preview -i D:\evidence\whatsapp-ambiguous.txt --timezone Europe/Madrid --date-order dmy
+    rv-rsmf convert -i D:\evidence\whatsapp-ambiguous.txt --timezone Europe/Madrid --date-order dmy
+    --custodian "Carla Méndez"
+  Convert a Telegram Desktop export and a folder of Teams .msg files (their times are UTC in the
+  export):
+    rv-rsmf convert -i D:\evidence\telegram -i D:\evidence\teams-msg -r
+  Convert the CSV of a mobile forensic tool with your own column mapping, or with a built-in
+  profile:
+    rv-rsmf convert -i D:\evidence\csv\generic.csv --csv-map D:\evidence\csv\generic.map.toml
+    --timezone Europe/Madrid
+    rv-rsmf convert -i D:\evidence\csv\xry-like.csv --csv-profile xry-draft --timezone
+    America/Bogota
+  Every export of a folder in one run, two algorithms, reports in three languages, JSON progress:
+    rv-rsmf convert -i D:\evidence -r --timezone Europe/Paris --date-order dmy --hash sha256,md5
+    --lang all --progress jsonl > events.jsonl
+  Offline lab: no timestamp request now; add it later with `rv-rsmf timestamp <LOG>`:
+    rv-rsmf convert -i D:\evidence -r --timezone Europe/Paris --date-order dmy --no-timestamp
   In a case folder, registering the evidence with rv-hashinv first, then verify the case:
-    rv-rsmf convert -i D:\export -r --case-dir E:\CASE-014 --case CASE-014 --timezone Europe/Paris
-    --intake hashinv
+    rv-rsmf convert -i D:\evidence -r --case-dir E:\CASE-014 --case CASE-014 --timezone Europe/Paris
+    --date-order dmy --intake hashinv
     rv-rsmf verify-case E:\CASE-014
-  Check any .rsmf file (ours or another tool's):
-    rv-rsmf validate out\rsmf\<RUN-ID>\001-chat\Ana-Bob-1a2b3c\2026-03-02.rsmf
+  Convert every item already registered in the case, or two of them:
+    rv-rsmf convert --case-dir E:\CASE-014 --timezone Europe/Paris --date-order dmy
+    rv-rsmf convert --case-dir E:\CASE-014 --evidence E0001,E0002 --timezone Europe/Madrid
+  Check the RSMF files of a run again (or any .rsmf file, ours or another tool's):
+    rv-rsmf validate rakvor-out\rsmf\20261019T101500Z-a1b2c3
+  The summary starts with DONE, "DONE (high-severity findings)" (exit code 3) or CANCELLED,
+  then gives the counts, the timestamp status, the report and log folders and the RSMF files.
 
 EXIT CODES:
   0    Completed; no high-severity finding.
@@ -411,8 +427,18 @@ Options:
           Print help (see a summary with '-h')
 
 EXAMPLES:
-  rv-rsmf preview -i chat.txt --timezone Europe/Paris
-  rv-rsmf preview -i D:\telegram\result.json --limit 5 --json
+  See how a WhatsApp export will be read (date order and why, time zone, the first 20 messages):
+    rv-rsmf preview -i D:\evidence\whatsapp-android-en --timezone Europe/Paris
+  An export whose dates can be read both ways, once you have chosen the date order:
+    rv-rsmf preview -i D:\evidence\whatsapp-ambiguous.txt --timezone Europe/Madrid --date-order dmy
+  A Telegram Desktop export (times are UTC in the export), five messages, as JSON for scripts:
+    rv-rsmf preview -i D:\evidence\telegram -r --limit 5 --json
+  A CSV read with a built-in profile, and a renamed WhatsApp file read with --source:
+    rv-rsmf preview -i D:\evidence\csv\xry-like.csv --csv-profile xry-draft --timezone
+    America/Bogota
+    rv-rsmf preview -i chat.txt --source whatsapp --timezone Europe/Paris
+  When --timezone, --date-order or a CSV mapping is needed and missing, preview says which (exit
+  code 2).
 
 EXIT CODES:
   0  Every export can be converted with these options.
@@ -441,8 +467,12 @@ Options:
           Print help (see a summary with '-h')
 
 EXAMPLES:
-  rv-rsmf validate out\rsmf\<RUN-ID>
-  rv-rsmf validate other-vendor.rsmf
+  Check every .rsmf file of a run (the folder is searched recursively):
+    rv-rsmf validate rakvor-out\rsmf\20261019T101500Z-a1b2c3
+  Check one file, ours or another vendor's:
+    rv-rsmf validate other-vendor.rsmf
+  Each file gets one line: OK (with its event and attachment counts), INVALID (then one line per
+  problem) or ERROR.
 
 EXIT CODES:
   0  Every file passes the RSMF 2.0 schema and the strict checks.
@@ -510,10 +540,15 @@ CHECKS:
     Output: "outputs: N verified of M recorded (algorithms)".
 
 EXAMPLES:
-  rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3/audit.jsonl
-  rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3
-  rv-rsmf verify-log E:\CASE-014\runs\rv-rsmf\20261019T101500Z-a1b2c3\logs
-  rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-ca digicert-tsa-roots.pem
+  Verify a standalone run (its log folder, or the audit.jsonl in it):
+    rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3
+    rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3/audit.jsonl
+  Verify a run inside a case folder:
+    rv-rsmf verify-log E:\CASE-014\runs\rv-rsmf\20261019T101500Z-a1b2c3\logs
+  Also validate the TSA certificate chain against the TSA's own root certificates:
+    rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-ca digicert-tsa-roots.pem
+  An intact log prints "OK  <N> entries, chain intact", then the timestamp, truncation and
+  outputs lines; an altered one prints BROKEN and one line per problem (exit code 3).
 
 EXIT CODES:
   0  The chain is intact and agrees with its timestamps and case record (if any), and every
@@ -539,7 +574,8 @@ Options:
           Print help (see a summary with '-h')
 
 EXAMPLES:
-  rv-rsmf self-test
+  Check this build before casework (one PASS or FAIL line per algorithm):
+    rv-rsmf self-test
 
 EXIT CODES:
   0  All algorithms give the published answer for the input "abc".
@@ -574,8 +610,13 @@ Options:
           Print help (see a summary with '-h')
 
 EXAMPLES:
-  rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3
-  rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-url https://freetsa.org/tsr
+  The run was offline (timestamp_pending): add the timestamp once the network is back:
+    rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3
+  Use another RFC 3161 authority:
+    rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-url https://freetsa.org/tsr
+  Name the examiner in the new audit entry:
+    rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3 --actor "Ana Ruiz"
+  Success prints "OK  timestamp <TIME> by <TSA> covers entry #<N>"; then run verify-log.
 
 EXIT CODES:
   0  Timestamp obtained and logged.
@@ -619,8 +660,12 @@ CHECKS:
     and its digests are compared with the registry (the latest registration of a path).
 
 EXAMPLES:
-  rv-rsmf verify-case E:\CASE-014
-  rv-rsmf verify-case E:\CASE-014 --rehash
+  Check the case log, the registry and every run of the case:
+    rv-rsmf verify-case E:\CASE-014
+  Also read every registered item again and compare it with the registry:
+    rv-rsmf verify-case E:\CASE-014 --rehash
+  An intact case prints "OK  case <ID>: ..." and an outputs line; a failed check prints
+  BROKEN and one line per problem (exit code 3).
 
 EXIT CODES:
   0  The case folder is intact (warnings, e.g. a run still in progress or an item not
@@ -658,8 +703,10 @@ OFF SWITCH:
   %APPDATA%\Rakvor (RV Hub's setting), turns the check off for every Rakvor tool.
 
 EXAMPLES:
-  rv-rsmf update-check
-  rv-rsmf update-check --json
+  Ask whether a newer release is published (one line):
+    rv-rsmf update-check
+  The same answer as JSON, for scripts:
+    rv-rsmf update-check --json
 
 EXIT CODES:
   0  This is the latest release, or the check is turned off.
@@ -694,7 +741,8 @@ DESCRIPTION:
   verifies every item against the evidence registry and registers nothing.
 
 EXAMPLES:
-  rv-rsmf describe --json
+  Print the description that RV Hub reads:
+    rv-rsmf describe --json
 
 EXIT CODES:
   0  The description was printed.

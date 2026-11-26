@@ -2,6 +2,8 @@
 
 # RV RSMF
 
+**English** · [Español](README.es.md) · [Français](README.fr.md)
+
 <!-- forge:description -->
 **Converts chat exports to RSMF for Relativity.** RV RSMF turns WhatsApp, Telegram, Microsoft Teams and mobile-tool CSV chat exports into RSMF 2.0 files (one per conversation per day), validates every file, and traces each message back to its line in the export.
 <!-- /forge:description -->
@@ -118,6 +120,7 @@ rv-rsmf verify-case E:\CASE-014
 **Sample:** synthetic exports of every source (invented people only) are in [examples/](examples/README.md);
 `examples/sample/run.ps1` (Windows) or `run.sh` converts them all in one run and checks the result.
 
+The common tasks, step by step: [docs/quick-guide.md](docs/quick-guide.md).
 Every option, example and exit code: [docs/usage-cli.md](docs/usage-cli.md) (generated from `--help`). The
 complete walkthrough: [docs/usage.md](docs/usage.md).
 
@@ -154,6 +157,7 @@ them). Every file is described in [docs/reports.md](docs/reports.md).
 
 | Page | For |
 | --- | --- |
+| [docs/quick-guide.md](docs/quick-guide.md) | The six common tasks (preview, convert, case folder, validate, verify-log and verify-case, timestamp), every GUI button, exit codes |
 | [docs/theory.md](docs/theory.md) | What the tool does to the data: plain-language part for clients, lawyers and judges; RSMF structure, parsing rules, time conversion, slicing, validation and trace map for examiners and opposing experts |
 | [docs/admissibility.md](docs/admissibility.md) | Reliability argument and requirements of Colombia, France/EU, ISO and US/UK mapped to tool features, gap list, examiner checklist (for counsel review) |
 | [docs/usage.md](docs/usage.md) | End-to-end walkthrough: preview, choosing time zone, date order and custodian, CSV mappings, case folder, validation, reading the outputs, troubleshooting |
@@ -168,6 +172,9 @@ them). Every file is described in [docs/reports.md](docs/reports.md).
 | [docs/release-process.md](docs/release-process.md) | Windows packages, code signing and GitHub releases, step by step |
 | [docs/adr/](docs/adr/) | Architecture decisions (why Rust) |
 
+The README, the quick guide, the usage guide, the desktop-app guide and the installation guide also exist in Spanish
+(`.es.md`) and French (`.fr.md`); the English pages are the reference.
+
 ## Project layout
 
 ```text
@@ -181,6 +188,7 @@ rv-rsmf/
 ├── templates/     HTML report templates + CSS (minijinja)
 ├── i18n/          report wording: en.json, es.json, fr.json
 ├── docs/          documentation (Mermaid diagrams render on GitHub)
+├── scripts/       docs checks (translations keep the shape of the English pages)
 ├── tests/         Python oracles: RSMF oracle, end-to-end sample check, audit-chain verifier, report schemas
 ├── examples/      synthetic chat exports + expected results + run scripts
 ├── packaging/     Windows installer (Inno Setup)

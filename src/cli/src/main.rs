@@ -50,20 +50,30 @@ DESCRIPTION:
 
 const SCAN_AFTER_HELP: &str = "\
 EXAMPLES:
-  Convert an Android WhatsApp export (phone set to Paris time), Spanish reports:
-    rv-rsmf convert -i \"D:\\export\\WhatsApp Chat with Ana.txt\" --timezone Europe/Paris --lang es
-  Check the dates first, then convert an ambiguous export (all days <= 12) read as day/month/year:
-    rv-rsmf preview -i chat.txt --timezone America/Bogota
-    rv-rsmf convert -i chat.txt --timezone America/Bogota --date-order dmy --custodian \"Ana Ruiz\"
-  Convert a Telegram Desktop export (times are UTC in the export) and a folder of Teams .msg files:
-    rv-rsmf convert -i D:\\telegram\\result.json -i D:\\purview\\teams -r
-  Convert an XRY-style CSV with your own column mapping:
-    rv-rsmf convert -i chats.csv --csv-map xry.toml --timezone Europe/Madrid
+  Convert an Android WhatsApp export (the phone was set to Paris time), reports in Spanish:
+    rv-rsmf convert -i D:\\evidence\\whatsapp-android-en --timezone Europe/Paris --lang es
+  Check the dates first, then convert an export whose dates can be read both ways (every day <= 12):
+    rv-rsmf preview -i D:\\evidence\\whatsapp-ambiguous.txt --timezone Europe/Madrid --date-order dmy
+    rv-rsmf convert -i D:\\evidence\\whatsapp-ambiguous.txt --timezone Europe/Madrid --date-order dmy --custodian \"Carla Méndez\"
+  Convert a Telegram Desktop export and a folder of Teams .msg files (their times are UTC in the export):
+    rv-rsmf convert -i D:\\evidence\\telegram -i D:\\evidence\\teams-msg -r
+  Convert the CSV of a mobile forensic tool with your own column mapping, or with a built-in profile:
+    rv-rsmf convert -i D:\\evidence\\csv\\generic.csv --csv-map D:\\evidence\\csv\\generic.map.toml --timezone Europe/Madrid
+    rv-rsmf convert -i D:\\evidence\\csv\\xry-like.csv --csv-profile xry-draft --timezone America/Bogota
+  Every export of a folder in one run, two algorithms, reports in three languages, JSON progress:
+    rv-rsmf convert -i D:\\evidence -r --timezone Europe/Paris --date-order dmy --hash sha256,md5 --lang all --progress jsonl > events.jsonl
+  Offline lab: no timestamp request now; add it later with `rv-rsmf timestamp <LOG>`:
+    rv-rsmf convert -i D:\\evidence -r --timezone Europe/Paris --date-order dmy --no-timestamp
   In a case folder, registering the evidence with rv-hashinv first, then verify the case:
-    rv-rsmf convert -i D:\\export -r --case-dir E:\\CASE-014 --case CASE-014 --timezone Europe/Paris --intake hashinv
+    rv-rsmf convert -i D:\\evidence -r --case-dir E:\\CASE-014 --case CASE-014 --timezone Europe/Paris --date-order dmy --intake hashinv
     rv-rsmf verify-case E:\\CASE-014
-  Check any .rsmf file (ours or another tool's):
-    rv-rsmf validate out\\rsmf\\<RUN-ID>\\001-chat\\Ana-Bob-1a2b3c\\2026-03-02.rsmf
+  Convert every item already registered in the case, or two of them:
+    rv-rsmf convert --case-dir E:\\CASE-014 --timezone Europe/Paris --date-order dmy
+    rv-rsmf convert --case-dir E:\\CASE-014 --evidence E0001,E0002 --timezone Europe/Madrid
+  Check the RSMF files of a run again (or any .rsmf file, ours or another tool's):
+    rv-rsmf validate rakvor-out\\rsmf\\20261019T101500Z-a1b2c3
+  The summary starts with DONE, \"DONE (high-severity findings)\" (exit code 3) or CANCELLED,
+  then gives the counts, the timestamp status, the report and log folders and the RSMF files.
 
 EXIT CODES:
   0    Completed; no high-severity finding.
@@ -178,10 +188,15 @@ CHECKS:
     Output: \"outputs: N verified of M recorded (algorithms)\".
 
 EXAMPLES:
-  rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3/audit.jsonl
-  rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3
-  rv-rsmf verify-log E:\\CASE-014\\runs\\rv-rsmf\\20261019T101500Z-a1b2c3\\logs
-  rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-ca digicert-tsa-roots.pem
+  Verify a standalone run (its log folder, or the audit.jsonl in it):
+    rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3
+    rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3/audit.jsonl
+  Verify a run inside a case folder:
+    rv-rsmf verify-log E:\\CASE-014\\runs\\rv-rsmf\\20261019T101500Z-a1b2c3\\logs
+  Also validate the TSA certificate chain against the TSA's own root certificates:
+    rv-rsmf verify-log rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-ca digicert-tsa-roots.pem
+  An intact log prints \"OK  <N> entries, chain intact\", then the timestamp, truncation and
+  outputs lines; an altered one prints BROKEN and one line per problem (exit code 3).
 
 EXIT CODES:
   0  The chain is intact and agrees with its timestamps and case record (if any), and every
@@ -209,7 +224,8 @@ EXIT CODES:
     /// Check every hash algorithm against known-answer test vectors.
     #[command(after_long_help = "\
 EXAMPLES:
-  rv-rsmf self-test
+  Check this build before casework (one PASS or FAIL line per algorithm):
+    rv-rsmf self-test
 
 EXIT CODES:
   0  All algorithms give the published answer for the input \"abc\".
@@ -218,8 +234,13 @@ EXIT CODES:
     /// Add an RFC 3161 timestamp to a finished run (e.g. after working offline).
     #[command(after_long_help = "\
 EXAMPLES:
-  rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3
-  rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-url https://freetsa.org/tsr
+  The run was offline (timestamp_pending): add the timestamp once the network is back:
+    rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3
+  Use another RFC 3161 authority:
+    rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3 --tsa-url https://freetsa.org/tsr
+  Name the examiner in the new audit entry:
+    rv-rsmf timestamp rakvor-out/logs/20261019T101500Z-a1b2c3 --actor \"Ana Ruiz\"
+  Success prints \"OK  timestamp <TIME> by <TSA> covers entry #<N>\"; then run verify-log.
 
 EXIT CODES:
   0  Timestamp obtained and logged.
@@ -257,8 +278,12 @@ CHECKS:
     and its digests are compared with the registry (the latest registration of a path).
 
 EXAMPLES:
-  rv-rsmf verify-case E:\\CASE-014
-  rv-rsmf verify-case E:\\CASE-014 --rehash
+  Check the case log, the registry and every run of the case:
+    rv-rsmf verify-case E:\\CASE-014
+  Also read every registered item again and compare it with the registry:
+    rv-rsmf verify-case E:\\CASE-014 --rehash
+  An intact case prints \"OK  case <ID>: ...\" and an outputs line; a failed check prints
+  BROKEN and one line per problem (exit code 3).
 
 EXIT CODES:
   0  The case folder is intact (warnings, e.g. a run still in progress or an item not
@@ -291,8 +316,10 @@ OFF SWITCH:
   %APPDATA%\\Rakvor (RV Hub's setting), turns the check off for every Rakvor tool.
 
 EXAMPLES:
-  rv-rsmf update-check
-  rv-rsmf update-check --json
+  Ask whether a newer release is published (one line):
+    rv-rsmf update-check
+  The same answer as JSON, for scripts:
+    rv-rsmf update-check --json
 
 EXIT CODES:
   0  This is the latest release, or the check is turned off.
@@ -306,7 +333,13 @@ EXIT CODES:
         json: bool,
     },
     /// Print the full help of every command as Markdown (used to generate docs/usage-cli.md).
-    #[command(hide = true)]
+    #[command(
+        hide = true,
+        after_long_help = "\
+EXAMPLES:
+  Regenerate the command-line reference:
+    rv-rsmf docs-cli > docs/usage-cli.md"
+    )]
     DocsCli,
     /// Describe this tool as JSON (schema rakvor.describe/1) for RV Hub and scripts.
     #[command(hide = true, after_long_help = DESCRIBE_AFTER_HELP)]
@@ -331,7 +364,8 @@ DESCRIPTION:
   verifies every item against the evidence registry and registers nothing.
 
 EXAMPLES:
-  rv-rsmf describe --json
+  Print the description that RV Hub reads:
+    rv-rsmf describe --json
 
 EXIT CODES:
   0  The description was printed.";
@@ -622,8 +656,16 @@ struct PreviewArgs {
 
 const PREVIEW_AFTER_HELP: &str = "\
 EXAMPLES:
-  rv-rsmf preview -i chat.txt --timezone Europe/Paris
-  rv-rsmf preview -i D:\\telegram\\result.json --limit 5 --json
+  See how a WhatsApp export will be read (date order and why, time zone, the first 20 messages):
+    rv-rsmf preview -i D:\\evidence\\whatsapp-android-en --timezone Europe/Paris
+  An export whose dates can be read both ways, once you have chosen the date order:
+    rv-rsmf preview -i D:\\evidence\\whatsapp-ambiguous.txt --timezone Europe/Madrid --date-order dmy
+  A Telegram Desktop export (times are UTC in the export), five messages, as JSON for scripts:
+    rv-rsmf preview -i D:\\evidence\\telegram -r --limit 5 --json
+  A CSV read with a built-in profile, and a renamed WhatsApp file read with --source:
+    rv-rsmf preview -i D:\\evidence\\csv\\xry-like.csv --csv-profile xry-draft --timezone America/Bogota
+    rv-rsmf preview -i chat.txt --source whatsapp --timezone Europe/Paris
+  When --timezone, --date-order or a CSV mapping is needed and missing, preview says which (exit code 2).
 
 EXIT CODES:
   0  Every export can be converted with these options.
@@ -636,8 +678,12 @@ FORENSIC NOTES:
 
 const VALIDATE_AFTER_HELP: &str = "\
 EXAMPLES:
-  rv-rsmf validate out\\rsmf\\<RUN-ID>
-  rv-rsmf validate other-vendor.rsmf
+  Check every .rsmf file of a run (the folder is searched recursively):
+    rv-rsmf validate rakvor-out\\rsmf\\20261019T101500Z-a1b2c3
+  Check one file, ours or another vendor's:
+    rv-rsmf validate other-vendor.rsmf
+  Each file gets one line: OK (with its event and attachment counts), INVALID (then one line per
+  problem) or ERROR.
 
 EXIT CODES:
   0  Every file passes the RSMF 2.0 schema and the strict checks.
@@ -1401,5 +1447,141 @@ fn update_check(json: bool) -> u8 {
         update::Check::Available { .. } => 3,
         update::Check::Failed { .. } => 1,
         update::Check::UpToDate { .. } | update::Check::Disabled { .. } => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The command lines listed under EXAMPLES: in a long help (lines that start with the tool name).
+    fn examples(help: &str) -> Vec<String> {
+        let Some(section) = help.split("EXAMPLES:\n").nth(1) else {
+            return vec![];
+        };
+        // Commands are indented by 4. clap wraps a long one onto further lines with the same indent (a longer
+        // tool name after scaffolding can push it past the width): those lines continue the command.
+        let prefix = format!("{} ", TOOL_NAME);
+        let mut out: Vec<String> = vec![];
+        let mut in_command = false;
+        for l in section
+            .lines()
+            .take_while(|l| l.is_empty() || l.starts_with(' '))
+        {
+            let t = l.trim();
+            if t.starts_with(&prefix) {
+                out.push(t.to_string());
+                in_command = true;
+            } else if in_command && l.starts_with("    ") && !t.is_empty() {
+                if let Some(last) = out.last_mut() {
+                    last.push(' ');
+                    last.push_str(t);
+                }
+            } else {
+                in_command = false;
+            }
+        }
+        out
+    }
+
+    /// Splits an example like a shell would for these simple lines: whitespace, "double quotes", and a final
+    /// `> FILE` redirection that is not an argument.
+    fn split_args(line: &str) -> Vec<String> {
+        let (mut args, mut cur, mut quoted, mut any) = (vec![], String::new(), false, false);
+        for c in line.chars() {
+            match c {
+                '"' => {
+                    quoted = !quoted;
+                    any = true;
+                }
+                c if c.is_whitespace() && !quoted => {
+                    if any {
+                        args.push(std::mem::take(&mut cur));
+                        any = false;
+                    }
+                }
+                c => {
+                    cur.push(c);
+                    any = true;
+                }
+            }
+        }
+        if any {
+            args.push(cur);
+        }
+        if let Some(i) = args.iter().position(|a| a == ">") {
+            args.truncate(i);
+        }
+        args
+    }
+
+    /// Every (sub)command below the root with its path of names: `["convert"]`, `["verify-log"]`, …
+    fn commands(
+        cmd: &clap::Command,
+        path: Vec<String>,
+        out: &mut Vec<(Vec<String>, clap::Command)>,
+    ) {
+        for sub in cmd.get_subcommands().filter(|s| s.get_name() != "help") {
+            let mut p = path.clone();
+            p.push(sub.get_name().to_string());
+            out.push((p.clone(), sub.clone()));
+            commands(sub, p, out);
+        }
+    }
+
+    #[test]
+    fn every_subcommand_has_worked_examples_that_parse() {
+        let mut root = Cli::command().term_width(100);
+        root.build();
+        let mut all = vec![];
+        commands(&root, vec![], &mut all);
+        let mut checked = 0;
+        for (path, sub) in all {
+            let help = sub.clone().render_long_help().to_string();
+            let lines = examples(&help);
+            assert!(
+                lines
+                    .first()
+                    .is_some_and(|l| split_args(l).get(1..=path.len()) == Some(&path[..])),
+                "`{} {}` has no EXAMPLES of itself",
+                TOOL_NAME,
+                path.join(" ")
+            );
+            for line in lines {
+                let args = split_args(&line);
+                if let Err(e) = Cli::try_parse_from(&args) {
+                    panic!("example `{}` does not parse: {}", line, e);
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked >= 25, "{} examples", checked);
+    }
+
+    /// tests/examples.rs runs the examples of every subcommand that docs-cli documents (visible ones and
+    /// `describe`, with their visible children) plus `docs-cli`; any other hidden subcommand would be only
+    /// parsed, so it must be added there.
+    #[test]
+    fn example_runner_sees_every_subcommand() {
+        let mut root = Cli::command();
+        root.build();
+        let mut all = vec![];
+        commands(&root, vec![], &mut all);
+        for (path, sub) in all {
+            let name = path.join(" ");
+            assert!(
+                !sub.is_hide_set() || name == "describe" || name == "docs-cli",
+                "hidden subcommand `{}`: run its examples in tests/examples.rs (or list it in PARSE_ONLY there)",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn split_args_handles_quotes_and_redirection() {
+        assert_eq!(
+            split_args(r#"rv-rsmf timestamp L --actor "Ana Ruiz" > out.txt"#),
+            ["rv-rsmf", "timestamp", "L", "--actor", "Ana Ruiz"]
+        );
     }
 }
