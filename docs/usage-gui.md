@@ -26,7 +26,8 @@ flowchart TD
 | **1. Evidence** | *Add files…* and *Add folder…* open the Windows pickers. You can also drag files or folders onto the window (or onto the `rv-rsmf-gui.exe` icon before it starts), or paste a path and press Enter. *Include subfolders* is on by default. Remove an entry with **x**. |
 | **2. Hash algorithms** | Tick one or two. When two are ticked, the others are disabled; you cannot untick the last one. |
 | **3. Reports** | Language (English, Español, Français, or all three), output folder, examiner name (defaults to your Windows user), optional case ID. |
-| **4. Trust** | *Trusted timestamp* (on by default; TSA address editable), *Certificate…* to pick your `.p12`/`.pfx` and its password (kept in memory only, never logged) so every PDF is signed, and *Jurisdiction* (Colombia / France) for the custody form. |
+| **Chat export** (in section 1) | How the exports are read, as in `rv-rsmf preview` and `convert`: *Source* (detected, or forced), *Device time zone* (required for WhatsApp and CSV), *Date order* (required when every date can be read both ways), *Custodian*, *CSV profile* and *CSV mapping file* (shown for CSV inputs) and *Platform name*. **Preview** reads the exports with these settings without writing anything; a setting the preview says is needed is framed in amber and marked *required*. |
+| **4. Trust** | *Custody form* (Colombia / France), *Trusted timestamp* (on by default; TSA address editable), and *Signing certificate (.p12/.pfx)* with *Browse…* to pick your `.p12`/`.pfx`, and its password (kept in memory only, never logged), so every PDF is signed. |
 | **Interface language** | Top-right selector: English, Español, Français. Changes every label immediately; independent of the report language. |
 | **Start review / Cancel** | Start is enabled once evidence is added. During a run the settings are locked and the button becomes *Cancel*. |
 | **Progress** | Bar by bytes processed, `files done / total`, elapsed time (always moving) and estimated time remaining. The file being read is shown below. |
@@ -64,5 +65,5 @@ therefore no log — exists yet.
 
 ## Same results as the command line
 
-The GUI calls the same engine as `rv-rsmf scan`. A GUI run with the same evidence, algorithms and language gives
+The GUI calls the same engine as `rv-rsmf convert`. A GUI run with the same evidence, algorithms and language gives
 identical hashes and findings; `environment.json` records `"frontend": "gui"` and the settings used.

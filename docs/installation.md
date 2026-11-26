@@ -92,9 +92,8 @@ Rakvor's own laptops, since the tool is used locally and not distributed. Audito
 with steps 2–3 and can inspect the signature against the root's fingerprint below.
 
 Install the root once per Rakvor machine (PowerShell as the user who runs the tool). The root file
-`rakvor-code-signing-root.cer` is the same for every Rakvor tool; this repository does not carry a copy (the
-rv-pdfauth repository has it at `packaging/signing/rakvor-code-signing-root.cer`), so obtain it from Rakvor's
-internal tooling and check its fingerprint first:
+`rakvor-code-signing-root.cer` is the same for every Rakvor tool; this repository has it at
+`packaging/signing/rakvor-code-signing-root.cer` (public certificate only). Check its fingerprint first:
 
 ```powershell
 # It must be exactly:
@@ -119,9 +118,8 @@ Get-AuthenticodeSignature .\rv-rsmf.exe, .\rv-rsmf-gui.exe | Format-Table Status
 | `NotSigned` | The release was built without a signing certificate: rely on steps 2–3; SmartScreen will warn |
 | `HashMismatch` / other | Stop: the file was altered after signing |
 
-With the Windows SDK, `signtool verify /pa /v rv-rsmf.exe` shows the full chain. The release workflow of this
-repository does **not** yet verify the signature against the Rakvor root after signing (rv-pdfauth's does); check it
-here.
+With the Windows SDK, `signtool verify /pa /v rv-rsmf.exe` shows the full chain. The release workflow checks after
+signing that every signature chains to the Rakvor root (`signtool verify /pa`); check it again here.
 
 **SmartScreen.** SmartScreen judges a download by the reputation of a **publicly** trusted certificate. The internal
 Rakvor root is not one, so "Windows protected your PC" (unknown publisher) can appear even when the signature is
@@ -222,8 +220,9 @@ timestamp setting.
 An offline run with the timestamp enabled still completes: it logs `timestamp_pending` and the statistics report
 shows a warning. Later, on a machine that can reach the TSA, run `rv-rsmf timestamp <log folder>` (it re-verifies
 the chain, then appends `timestamp_obtained`). To use an internal or qualified TSA, pass `--tsa-url`
-([admissibility.md](admissibility.md#53-eidas--regulation-eu-9102014-as-amended-by-eu-20241183)). The restriction
-is not enforced by the OS; on a connected workstation, a Windows Firewall outbound rule for `rv-rsmf.exe` /
+([admissibility.md](admissibility.md#53-eidas--regulation-eu-9102014-as-amended-by-eu-20241183)). The timestamp is
+eIDAS-qualified only if the TSA address is that of a qualified trust service provider (QTSP) on an EU trusted list;
+the default address (DigiCert) is not one. The restriction is not enforced by the OS; on a connected workstation, a Windows Firewall outbound rule for `rv-rsmf.exe` /
 `rv-rsmf-gui.exe` allowing only the TSA host enforces it.
 
 ## 8. Build from source for auditors

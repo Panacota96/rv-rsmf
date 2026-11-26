@@ -4,7 +4,8 @@ This page walks through a conversion end to end: checking an export with `previe
 examiner can make (time zone, date order, custodian, CSV mapping), converting standalone or in a case folder,
 validating, reading the outputs and `trace.csv`, verifying a run, and troubleshooting. Every option of every
 command is in [usage-cli.md](usage-cli.md) (generated from `--help`); the desktop app is in
-[usage-gui.md](usage-gui.md); what the tool does to the data is in [theory.md](theory.md).
+[usage-gui.md](usage-gui.md); what the tool does to the data is in [theory.md](theory.md). The common tasks in
+short: [quick-guide.md](quick-guide.md).
 
 ```mermaid
 flowchart LR
